@@ -11,8 +11,14 @@ em compatibilidade universal.
   symlink que escape do pacote e não completa arquivo ausente a partir de outro diretório.
 - Descriptor no formato já usado pela Foundation (`id`, `foundationApiMajor`, `origin`,
   `features`, `provides`, `requires`). Não há manifesto novo.
-- `api-cli` presente no workspace se o check `install` for obrigatório. Sem registry
-  allowlisted, esse check fica `not-run` e o perfil padrão não aprova.
+- `api-cli` presente e compilado no workspace (`../api-cli/dist`) se o check `install` for
+  obrigatório. Com `registry` e `foundationRoot` na requisição, o CLI do kit instala o módulo
+  pelo bin do `api-cli` (`install <nome>@<versão> --registry`). Sem registry allowlisted, esse
+  check fica `not-run` e o perfil padrão não aprova.
+- O host é o pacote `@devtrack/foundation-api` instalado (ou o diretório dele). O kit monta um
+  `node_modules` próprio ao lado da cópia do módulo: `@devtrack/foundation-api` aponta para o
+  host, e as demais dependências vêm do `node_modules` que contém o host. Boot e fixtures
+  resolvem pacotes como num consumidor instalado, sem tocar no checkout.
 - Inventário `artifact-inventory.json` do `buildArtifact` quando a exclusão física precisa
   ser provada. Sem o arquivo, o cenário fica `not-run`. Cache de imports não substitui o
   inventário.
@@ -70,6 +76,29 @@ entram nessa identidade.
 Perfil customizado precisa de `kind: "custom"` e `checks`. Omitir um check do padrão e
 ainda assim pedir `id: "standard"` é rejeitado.
 
+## 3.1 Declaração do módulo (`package.json#conformance`)
+
+```json
+"conformance": {
+  "layout": "module",
+  "boot": ["node", "conformance/boot.js"],
+  "consumer": "conformance/consumer.ts",
+  "implementer": "conformance/implementer.ts"
+}
+```
+
+- `consumer` e `implementer`: fixtures TypeScript publicadas no pacote (inclua `conformance/` em
+  `files`). Importam o pacote pelo próprio nome e são compiladas contra o pacote empacotado. O
+  consumidor usa a API pública; o implementador implementa um tipo ou porta exportado. Sem
+  declaração, o check fica `not-run` (`fixture-not-declared`). O kit não compila um contrato que
+  não pertence ao módulo.
+- `layout`: `module` para módulos técnicos distribuídos só com `dist` (ver seção 4). Sem o campo,
+  vale o layout `extension`.
+- `boot`: comando executado com prazo e teto de saída, a partir da cópia do módulo.
+
+Exemplo de uso: `@devtrack/jwt-auth` e `@devtrack/swagger-adapter` (change
+`split-foundation-repositories`, D8).
+
 ## 4. O que o perfil padrão verifica
 
 Checks obrigatórios: integridade, exports, consumidor TS, implementador TS, fronteiras,
@@ -77,7 +106,13 @@ composição, geração, boot, inventário e instalação.
 
 - Fronteiras usam `scripts/check-boundaries.mjs` com layout `extension`
   (`src/domain`, `src/application`). O layout `foundation` continua sendo o do host.
-  Layout desconhecido é erro, não aprovação. Pacote sem essas pastas fica `not-run`.
+  Layout desconhecido é erro, não aprovação. Pacote sem essas pastas e sem `layout: "module"`
+  fica `not-run`.
+- Layout `module`: o kit varre os `.js` e `.d.ts` do pacote. A Foundation só pode ser importada
+  por `@devtrack/foundation-api/contracts` e `/nest`. Subpath interno, raiz, nome antigo
+  `foundation-api` e import relativo que sai do pacote reprovam (`foundation-internal-import`,
+  com `arquivo -> especificador` na evidência).
+- Consumidor e implementador compilam as fixtures declaradas pelo módulo (seção 3.1).
 - Composição chama `resolveComposition`. Feature ligada e desligada são registradas em
   separado. Provider ausente ou ambíguo devolve o código do resolvedor
   (`MISSING_PROVIDER`, `AMBIGUOUS_PROVIDER`), sem escolher outro provider.
@@ -89,8 +124,10 @@ composição, geração, boot, inventário e instalação.
   runtime são distinções desse arquivo. Esta suíte não invoca `buildArtifact` (ele faz
   `npm ci`).
 - Instalação copia o pacote para área temporária sem symlink e, se `api-cli` carregar,
-  chama `validateManifest` e `parseDescriptor`. `installExtension` no host só roda com
-  `registry` e `foundationRoot`. Sem isso o check não é aprovado.
+  chama `validateManifest` e `parseDescriptor`. Os peers são validados contra o host real:
+  nome e versão do `package.json` dele e pacotes realmente instalados. A instalação canônica
+  (`api-cli install` a partir do registry) só roda com `registry` e `foundationRoot`. Sem isso
+  o check não é aprovado.
 
 ## 5. Como ler o relatório
 
@@ -134,7 +171,10 @@ procurada não apareceu. Isso não é compatibilidade universal.
 | saída 2, `timeout` | Fixture não encerrou no prazo | Corrigir o boot ou aumentar `limits.timeoutMs` |
 | saída 2, `registry-not-configured` | Perfil padrão sem registry | Informar registry allowlisted ou aceitar que o padrão não aprovou |
 | saída 2, `installer-interface-missing` | `api-cli` não carregou | `npm ci` em `api-cli`; não simular instalação |
-| saída 2, `insufficient-material` | Sem `src/domain` ou `src/application` | O gate não aprova o que não analisa |
+| saída 2, `insufficient-material` | Sem `src/domain` ou `src/application` e sem `layout: "module"` | Declarar o layout correto; o gate não aprova o que não analisa |
+| saída 2, `fixture-not-declared` | `conformance.consumer` ou `implementer` ausente | Publicar as fixtures em `conformance/` e declará-las |
+| saída 1, `foundation-internal-import` | Import da Foundation fora de `/contracts` e `/nest` | Usar só as fachadas públicas |
+| saída 1, `installer-rejected` com `PEER_INCOMPATIBLE` | Peer fora da faixa do host informado | Ajustar a faixa do peer ou qualificar contra o host certo |
 
 O processo filho recebe só `PATH`, `HOME` temporário e, se a requisição pedir, o sentinela
 de teste. O relatório não reproduz esse valor nem o ambiente completo.

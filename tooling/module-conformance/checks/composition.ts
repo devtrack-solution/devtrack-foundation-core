@@ -21,7 +21,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-export function readDescriptorFile(file: string, fallbackOrigin: ModuleDescriptor['origin']): ModuleDescriptor & { readonly exportName: string } {
+export function readDescriptorFile(
+  file: string,
+  fallbackOrigin: ModuleDescriptor['origin'],
+): ModuleDescriptor & { readonly exportName: string; readonly composition?: ExtensionSource['composition'] } {
   const raw: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
   if (!isRecord(raw) || typeof raw.id !== 'string') throw new Error(`Descriptor inválido: ${file}`);
   const origin = isRecord(raw.origin) ? (raw.origin as ModuleDescriptor['origin']) : fallbackOrigin;
@@ -33,6 +36,8 @@ export function readDescriptorFile(file: string, fallbackOrigin: ModuleDescripto
     provides: (raw.provides ?? []) as ModuleDescriptor['provides'],
     requires: (raw.requires ?? []) as ModuleDescriptor['requires'],
     exportName: typeof raw.exportName === 'string' ? raw.exportName : 'Module',
+    // Bloco de montagem (D7), revalidado pelo gerador canônico.
+    ...(isRecord(raw.composition) ? { composition: raw.composition as ExtensionSource['composition'] } : {}),
   };
 }
 
@@ -70,7 +75,7 @@ export function compositionFailure(error: unknown): CheckRecord {
 }
 
 export function renderDeclaredComposition(
-  descriptor: ModuleDescriptor & { readonly exportName: string },
+  descriptor: ModuleDescriptor & { readonly exportName: string; readonly composition?: ExtensionSource['composition'] },
   enabledFeatures: readonly string[],
   outputPath: string,
 ): string {
@@ -86,7 +91,11 @@ export function renderDeclaredComposition(
     'bindings: []',
     '',
   ].join('\n');
-  const extension: ExtensionSource = { descriptor, exportName: descriptor.exportName };
+  const extension: ExtensionSource = {
+    descriptor,
+    exportName: descriptor.exportName,
+    ...(descriptor.composition === undefined ? {} : { composition: descriptor.composition }),
+  };
   const rendered = renderComposition(profile, [extension], outputPath);
   return rendered.source;
 }

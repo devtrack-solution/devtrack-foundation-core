@@ -415,3 +415,133 @@ test('não remove diretório que a execução não criou', () => {
   assert.throws(() => owned.resolve('../outside'), /fora da área temporária/);
   owned.removeAll();
 });
+
+/** Host sintético `@devtrack/foundation-api` e módulo técnico com layout `module` (D8). */
+function technicalModule(options: { peer?: string; distJs?: string; implementer?: string; withConsumer?: boolean } = {}): {
+  dir: string;
+  request: ParsedRequest;
+} {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'conf-tech-'));
+  const host = path.join(dir, 'host');
+  const moduleRoot = path.join(dir, 'module');
+  const write = (root: string, relative: string, text: string): void => {
+    fs.mkdirSync(path.dirname(path.join(root, relative)), { recursive: true });
+    fs.writeFileSync(path.join(root, relative), text);
+  };
+  write(host, 'package.json', JSON.stringify({
+    name: '@devtrack/foundation-api',
+    version: '0.1.0',
+    exports: { './contracts': { types: './contracts.d.ts', default: './contracts.js' } },
+  }));
+  write(host, 'contracts.d.ts', 'export interface Clock {\n  now(): number;\n}\n');
+  write(host, 'contracts.js', "'use strict';\nmodule.exports = {};\n");
+  const conformance: Record<string, unknown> = {
+    layout: 'module',
+    boot: ['node', 'conformance/boot.js'],
+    implementer: 'conformance/implementer.ts',
+  };
+  if (options.withConsumer !== false) conformance.consumer = 'conformance/consumer.ts';
+  write(moduleRoot, 'package.json', JSON.stringify({
+    name: '@fixture/tech-module',
+    version: '1.0.0',
+    exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' }, './descriptor': './descriptor.json' },
+    peerDependencies: { '@devtrack/foundation-api': options.peer ?? '^0.1.0' },
+    conformance,
+  }));
+  write(moduleRoot, 'descriptor.json', JSON.stringify({
+    id: 'ext/tech-module',
+    foundationApiMajor: 1,
+    exportName: 'TechModule',
+    provides: [{ id: 'fixed-clock', major: 1 }],
+    requires: [],
+  }));
+  write(moduleRoot, 'dist/index.d.ts', "import type { Clock } from '@devtrack/foundation-api/contracts';\nexport declare function fixed(at: number): Clock;\n");
+  write(moduleRoot, 'dist/index.js', options.distJs ?? "'use strict';\nrequire('@devtrack/foundation-api/contracts');\nexports.fixed = (at) => ({ now: () => at });\n");
+  write(moduleRoot, 'conformance/consumer.ts', "import { fixed } from '@fixture/tech-module';\nexport const at: number = fixed(1).now();\n");
+  write(moduleRoot, 'conformance/implementer.ts', options.implementer ?? "import type { Clock } from '@devtrack/foundation-api/contracts';\nexport const clock: Clock = { now: () => 2 };\n");
+  write(moduleRoot, 'conformance/boot.js', "'use strict';\nconst m = require('@fixture/tech-module');\nprocess.exit(m.fixed(3).now() === 3 ? 0 : 1);\n");
+  const request = requestFor(moduleRoot, host, {
+    profile: {
+      id: 'tech',
+      version: 1,
+      kind: 'custom',
+      digest: 'ignored',
+      requiredChecks: ['integrity', 'exports', 'consumer', 'implementer', 'boundaries', 'generation', 'boot'],
+    },
+    selection: { descriptorFile: 'descriptor.json', enabledFeatures: [], companions: [], bindings: [] },
+    inventory: null,
+  });
+  // requestFor grava inventory.json no módulo: recalcula o digest depois disso.
+  return {
+    dir,
+    request: {
+      ...request,
+      host: { ...request.host, version: '0.1.0', digest: digestTree(host) },
+      module: { ...request.module, digest: digestTree(moduleRoot) },
+    },
+  };
+}
+
+function statusOf(report: { checks: readonly { id: string; status: string; reason?: string; evidence?: readonly string[] }[] }, id: string) {
+  return report.checks.find((item) => item.id === id);
+}
+
+test('módulo técnico: fixtures declaradas, fronteira module, boot e peers contra o host real passam', async () => {
+  const { dir, request } = technicalModule();
+  const { report, exitCode } = await runConformance({ request, outDir: path.join(dir, 'out') });
+  assert.equal(statusOf(report, 'boundaries')?.reason, 'layout:module');
+  assert.equal(statusOf(report, 'boundaries')?.status, 'passed');
+  for (const role of ['consumer', 'implementer']) {
+    assert.equal(statusOf(report, role)?.status, 'passed', `${role}: ${JSON.stringify(statusOf(report, role))}`);
+    assert.equal(statusOf(report, role)?.reason, 'declared-fixture');
+  }
+  assert.equal(statusOf(report, 'boot')?.status, 'passed', JSON.stringify(statusOf(report, 'boot')));
+  // Descriptor sem `origin`: o digest do kit vira SRI válido para o gerador canônico.
+  assert.equal(statusOf(report, 'generation')?.status, 'passed', JSON.stringify(statusOf(report, 'generation')));
+  assert.equal(statusOf(report, 'install')?.status, 'not-run', 'peer compatível: só falta registry');
+  assert.equal(statusOf(report, 'install')?.reason, 'registry-not-configured');
+  assert.deepEqual(report.checks.filter((item) => item.status === 'failed'), []);
+  assert.equal(report.result, 'passed');
+  assert.equal(exitCode, 0);
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('módulo técnico: import interno da Foundation reprova a fronteira module', async () => {
+  const { dir, request } = technicalModule({
+    distJs: "'use strict';\nrequire('@devtrack/foundation-api/dist/core/internal');\nexports.fixed = (at) => ({ now: () => at });\n",
+  });
+  const { report } = await runConformance({ request, outDir: path.join(dir, 'out') });
+  assert.equal(statusOf(report, 'boundaries')?.status, 'failed');
+  assert.equal(statusOf(report, 'boundaries')?.reason, 'foundation-internal-import');
+  assert.deepEqual(statusOf(report, 'boundaries')?.evidence, ['dist/index.js -> @devtrack/foundation-api/dist/core/internal']);
+  assert.equal(report.result, 'failed');
+  fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('módulo técnico: fixture não declarada fica not-run e fixture que não compila falha', async () => {
+  const missing = technicalModule({ withConsumer: false });
+  const first = await runConformance({ request: missing.request, outDir: path.join(missing.dir, 'out') });
+  assert.equal(statusOf(first.report, 'consumer')?.status, 'not-run');
+  assert.equal(statusOf(first.report, 'consumer')?.reason, 'fixture-not-declared');
+  assert.equal(first.report.result, 'incomplete');
+  fs.rmSync(missing.dir, { recursive: true, force: true });
+
+  const broken = technicalModule({
+    implementer: "import type { Clock } from '@devtrack/foundation-api/contracts';\nexport const clock: Clock = { now: () => 'texto' };\n",
+  });
+  const second = await runConformance({ request: broken.request, outDir: path.join(broken.dir, 'out') });
+  assert.equal(statusOf(second.report, 'implementer')?.status, 'failed');
+  assert.equal(statusOf(second.report, 'implementer')?.reason, 'compile');
+  assert.equal(second.report.result, 'failed');
+  fs.rmSync(broken.dir, { recursive: true, force: true });
+});
+
+test('módulo técnico: peer da Foundation fora da faixa do host reprova a instalação com as duas versões', async () => {
+  const { dir, request } = technicalModule({ peer: '^0.2.0' });
+  const { report } = await runConformance({ request, outDir: path.join(dir, 'out') });
+  const install = statusOf(report, 'install');
+  assert.equal(install?.status, 'failed');
+  assert.equal(install?.reason, 'installer-rejected');
+  assert.match(install?.evidence?.join('\n') ?? '', /@devtrack\/foundation-api@\^0\.2\.0.*instalado 0\.1\.0/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

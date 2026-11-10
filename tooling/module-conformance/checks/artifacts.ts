@@ -112,3 +112,85 @@ export function hasEscapingSymlink(root: string): string | null {
   };
   return walk(root);
 }
+
+const FOUNDATION_PACKAGE = '@devtrack/foundation-api';
+const LEGACY_FOUNDATION_PACKAGE = 'foundation-api';
+const FOUNDATION_PUBLIC = new Set([`${FOUNDATION_PACKAGE}/contracts`, `${FOUNDATION_PACKAGE}/nest`]);
+
+/**
+ * Fronteira de layout `module` (D8): varre `.js`/`.d.ts` do pacote empacotado. A Foundation só
+ * pode ser alcançada pelas fachadas `contracts` e `nest`; o nome antigo sem escopo e o import
+ * relativo que sai do pacote reprovam. Devolve `arquivo -> especificador`.
+ */
+export function moduleBoundaryViolations(root: string): string[] {
+  const found: string[] = [];
+  for (const relative of listFiles(root)) {
+    if (relative.startsWith('node_modules/') || !/\.(?:[cm]?js|d\.[cm]?ts)$/.test(relative)) continue;
+    const text = fs.readFileSync(path.join(root, relative), 'utf8');
+    for (const match of text.matchAll(SPECIFIER)) {
+      const specifier = match[1] ?? match[2];
+      if (specifier === undefined) continue;
+      if (specifier.startsWith('.')) {
+        const target = path.resolve(path.dirname(path.join(root, relative)), specifier);
+        if (!inside(root, target)) found.push(`${relative} -> ${specifier}`);
+        continue;
+      }
+      if (FOUNDATION_PUBLIC.has(specifier)) continue;
+      if ([FOUNDATION_PACKAGE, LEGACY_FOUNDATION_PACKAGE].some((name) => specifier === name || specifier.startsWith(`${name}/`)))
+        found.push(`${relative} -> ${specifier}`);
+    }
+  }
+  return [...new Set(found)].sort();
+}
+
+/** Diretório `node_modules` que resolve as dependências do host: o próprio ou o ancestral que o contém. */
+export function hostModulesDir(hostRoot: string): string | null {
+  const real = fs.realpathSync(hostRoot);
+  const own = path.join(real, 'node_modules');
+  if (fs.existsSync(own)) return own;
+  let current = path.dirname(real);
+  while (current !== path.dirname(current)) {
+    if (path.basename(current) === 'node_modules') return current;
+    current = path.dirname(current);
+  }
+  return null;
+}
+
+/**
+ * Monta um `node_modules` ao lado da cópia do módulo, para boot e fixtures resolverem pacotes
+ * como num consumidor instalado (D8): dependências do host por link e `@devtrack/foundation-api`
+ * apontando para o host. O próprio módulo não é ligado, para resolver sempre a cópia verificada.
+ */
+export function linkDependencyRoot(target: string, hostRoot: string, moduleName: string): void {
+  fs.mkdirSync(target, { recursive: true });
+  const link = (from: string, name: string): void => {
+    if (name === moduleName || name === FOUNDATION_PACKAGE) return;
+    const to = path.join(target, name);
+    if (fs.existsSync(to)) return;
+    fs.mkdirSync(path.dirname(to), { recursive: true });
+    fs.symlinkSync(from, to, 'dir');
+  };
+  const modules = hostModulesDir(hostRoot);
+  if (modules !== null) {
+    for (const entry of fs.readdirSync(modules, { withFileTypes: true })) {
+      if (entry.name.startsWith('.')) continue;
+      const full = path.join(modules, entry.name);
+      if (entry.name.startsWith('@') && fs.statSync(full).isDirectory()) {
+        for (const scoped of fs.readdirSync(full)) link(path.join(full, scoped), `${entry.name}/${scoped}`);
+      } else {
+        link(full, entry.name);
+      }
+    }
+  }
+  const foundation = path.join(target, ...FOUNDATION_PACKAGE.split('/'));
+  fs.mkdirSync(path.dirname(foundation), { recursive: true });
+  fs.symlinkSync(fs.realpathSync(hostRoot), foundation, 'dir');
+}
+
+/** Versão instalada de um pacote no `node_modules` montado, ou undefined. */
+export function linkedVersion(target: string, name: string): string | undefined {
+  const manifest = path.join(target, ...name.split('/'), 'package.json');
+  if (!fs.existsSync(manifest)) return undefined;
+  const version = (JSON.parse(fs.readFileSync(manifest, 'utf8')) as { version?: unknown }).version;
+  return typeof version === 'string' ? version : undefined;
+}

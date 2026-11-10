@@ -12,7 +12,10 @@ import {
   copyPackage,
   digestTree,
   hasEscapingSymlink,
+  linkDependencyRoot,
+  linkedVersion,
   missingExportFiles,
+  moduleBoundaryViolations,
 } from '../checks/artifacts';
 import {
   compatibilityRecords,
@@ -127,7 +130,7 @@ export async function runConformance(options: RunOptions): Promise<{ readonly re
     'Não demonstra compatibilidade universal nem estabilidade apenas por major igual.',
     'Contacts não participa desta verificação.',
     'Boot do Nest do host não é exercitado; só o entrypoint declarado pela fixture.',
-    `Layouts de fronteira realmente verificados: ${gate.SUPPORTED_BOUNDARY_LAYOUTS.join(', ')}.`,
+    `Layouts de fronteira realmente verificados: ${[...gate.SUPPORTED_BOUNDARY_LAYOUTS, 'module'].join(', ')}.`,
   ];
   let exception: ConformanceReport['exception'] = null;
   let selectionSummary: ConformanceReport['selection'] = { modules: [], bindings: [] };
@@ -213,6 +216,10 @@ export async function runConformance(options: RunOptions): Promise<{ readonly re
       checks.push(check('exports', 'failed', 'manifest-version-mismatch'));
       return finish('failed');
     }
+    const conformance = isRecord(manifest.conformance) ? manifest.conformance : {};
+    // Dependências resolvidas como num consumidor instalado: host + node_modules dele (D8).
+    const dependencyRoot = owned.resolve('node_modules');
+    linkDependencyRoot(dependencyRoot, request.host.path, String(manifest.name));
     const missing = missingExportFiles(placed, manifest);
     const checkoutDeps = checkoutDependentSpecifiers(placed);
     if (missing.length > 0) checks.push(check('exports', 'failed', 'export-file-missing', missing));
@@ -224,7 +231,8 @@ export async function runConformance(options: RunOptions): Promise<{ readonly re
       kind: 'npm' as const,
       packageName: String(manifest.name),
       version: String(manifest.version),
-      integrity: request.module.digest,
+      // O perfil exige SRI (`sha256-<base64>`); o digest do kit é `sha256:<hex>` do mesmo conteúdo.
+      integrity: sriFromDigest(request.module.digest),
     };
     const descriptor = readDescriptorFile(descriptorPath, origin);
     const companions = request.selection.companions.map((relative) => {
@@ -261,31 +269,46 @@ export async function runConformance(options: RunOptions): Promise<{ readonly re
       }
     }
 
-    const domainDir = path.join(placed, 'src', 'domain');
-    const applicationDir = path.join(placed, 'src', 'application');
-    const analyzable = fs.existsSync(domainDir) || fs.existsSync(applicationDir);
-    if (!analyzable) {
-      checks.push(check('boundaries', 'not-run', 'insufficient-material'));
-      limitations.push('Fronteira não analisada: o pacote não tem src/domain nem src/application.');
+    if (conformance.layout === 'module') {
+      const violations = moduleBoundaryViolations(placed);
+      checks.push(violations.length === 0
+        ? check('boundaries', 'passed', 'layout:module')
+        : check('boundaries', 'failed', 'foundation-internal-import', violations));
     } else {
-      try {
-        const errors = gate.checkBoundaries(placed, { layout: 'extension' });
-        checks.push(errors.length === 0
-          ? check('boundaries', 'passed', 'layout:extension')
-          : check('boundaries', 'failed', errors[0]?.rule ?? 'boundary', errors.map((item) => `${item.file}:${item.specifier ?? item.rule}`)));
-      } catch (error) {
-        checks.push(check('boundaries', 'not-run', 'gate-unavailable', [error instanceof Error ? error.message : String(error)]));
+      const domainDir = path.join(placed, 'src', 'domain');
+      const applicationDir = path.join(placed, 'src', 'application');
+      const analyzable = fs.existsSync(domainDir) || fs.existsSync(applicationDir);
+      if (!analyzable) {
+        checks.push(check('boundaries', 'not-run', 'insufficient-material'));
+        limitations.push('Fronteira não analisada: o pacote não tem src/domain nem src/application e não declara layout module.');
+      } else {
+        try {
+          const errors = gate.checkBoundaries(placed, { layout: 'extension' });
+          checks.push(errors.length === 0
+            ? check('boundaries', 'passed', 'layout:extension')
+            : check('boundaries', 'failed', errors[0]?.rule ?? 'boundary', errors.map((item) => `${item.file}:${item.specifier ?? item.rule}`)));
+        } catch (error) {
+          checks.push(check('boundaries', 'not-run', 'gate-unavailable', [error instanceof Error ? error.message : String(error)]));
+        }
       }
     }
 
-    const consumerFile = owned.resolve('consumer.ts');
-    fs.writeFileSync(consumerFile, `import { read } from '${path.join(placed, 'src/contract')}';\nexport const value: number = read({ id: 'a', value: 1 });\n`);
-    const implementerFile = owned.resolve('implementer-self.ts');
-    fs.writeFileSync(implementerFile, `import type { Reading } from '${path.join(placed, 'src/contract')}';\nexport function write(input: Reading): number { return input.value; }\n`);
-    const consumerErrors = compileFixture([consumerFile], placed);
-    const implementerErrors = compileFixture([implementerFile], placed);
-    checks.push(consumerErrors.length === 0 ? check('consumer', 'passed') : check('consumer', 'failed', 'compile', consumerErrors.slice(0, 3)));
-    checks.push(implementerErrors.length === 0 ? check('implementer', 'passed') : check('implementer', 'failed', 'compile', implementerErrors.slice(0, 3)));
+    // Consumidor e implementador: fixtures declaradas e publicadas pelo próprio módulo (D8).
+    for (const role of ['consumer', 'implementer'] as const) {
+      const declared = conformance[role];
+      if (typeof declared !== 'string') {
+        checks.push(check(role, 'not-run', 'fixture-not-declared'));
+        continue;
+      }
+      const fixture = path.resolve(placed, declared);
+      const relative = path.relative(placed, fixture);
+      if (relative.startsWith('..') || path.isAbsolute(relative) || !fs.existsSync(fixture)) {
+        checks.push(check(role, 'failed', 'fixture-missing', [declared]));
+        continue;
+      }
+      const errors = compileFixture([fixture], placed);
+      checks.push(errors.length === 0 ? check(role, 'passed', 'declared-fixture') : check(role, 'failed', 'compile', errors.slice(0, 3)));
+    }
 
     const boot = manifest.conformance;
     const bootArgs = isRecord(boot) && Array.isArray(boot.boot) ? (boot.boot as unknown[]) : null;
@@ -331,9 +354,12 @@ export async function runConformance(options: RunOptions): Promise<{ readonly re
       limitations.push('installExtension/validateManifest indisponível. Não houve simulação de instalação.');
     } else {
       try {
+        // Peers contra o host real: nome e versão do package.json dele e pacotes realmente instalados (D8).
+        const hostManifest = JSON.parse(fs.readFileSync(path.join(request.host.path, 'package.json'), 'utf8')) as { name?: unknown; version?: unknown };
         installer.validateManifest(manifest, { name: manifest.name, version: manifest.version }, {
-          foundationVersion: '0.0.1',
-          installedVersion: () => undefined,
+          foundationName: String(hostManifest.name),
+          foundationVersion: String(hostManifest.version),
+          installedVersion: (name: string) => linkedVersion(dependencyRoot, name),
         });
         installer.parseDescriptor(JSON.parse(fs.readFileSync(descriptorPath, 'utf8')), String(manifest.name));
         if (request.registry === null || options.installExtension === undefined) {
@@ -402,6 +428,11 @@ export async function runConformance(options: RunOptions): Promise<{ readonly re
     checks.push(check('runner', 'failed', 'runner-error', [error instanceof Error ? error.message : String(error)]));
     return finish('failed');
   }
+}
+
+function sriFromDigest(digest: string): string {
+  const match = /^sha256:([0-9a-f]{64})$/.exec(digest);
+  return match === null ? digest : `sha256-${Buffer.from(match[1], 'hex').toString('base64')}`;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

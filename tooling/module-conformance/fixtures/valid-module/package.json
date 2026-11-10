@@ -9,6 +9,11 @@
     "./descriptor": "./descriptor.json"
   },
   "conformance": {
-    "boot": ["node", "boot.js"]
+    "boot": [
+      "node",
+      "boot.js"
+    ],
+    "consumer": "conformance/consumer.ts",
+    "implementer": "conformance/implementer.ts"
   }
 }
