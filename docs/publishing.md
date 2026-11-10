@@ -32,7 +32,12 @@ O registry não fica no `package.json`. Cada ambiente o define no `.npmrc` (loca
 ```
 
 - O ensaio usa sempre um Verdaccio local, por exemplo `DEVTRACK_REGISTRY=http://localhost:4873`.
-- O destino real (npm público com a organização `devtrack` ou feed do Azure Artifacts) é uma decisão aberta da change. Ele só muda a variável e as credenciais do pipeline.
+- Destino provisório (decisão de 2026-11-10): o registry local persistente do workspace, `tooling/local-registry/` na raiz do monorepo (`./start.sh`, `http://localhost:4873`, storage em `~/.devtrack/verdaccio`). O destino definitivo (npm público com a organização `devtrack` ou feed do Azure Artifacts) continua aberto e só muda a variável e as credenciais do pipeline.
+- Quem tem `@devtrack:registry=https://registry.npmjs.org/` no `~/.npmrc` precisa sobrescrever o escopo no `.npmrc` do projeto (ou usar `npm_config_userconfig` apontando para um `.npmrc` próprio), senão `npm install` procura os pacotes no npmjs e `npm publish` pode tentar publicar lá.
+
+### Lockfile sem URL de registry
+
+Os repositórios dos módulos versionam um `.npmrc` com `omit-lockfile-registry-resolved=true`. O lock guarda versão e `integrity`, mas não o `resolved`, e cada ambiente baixa do registry configurado. Assim o mesmo lock serve ao registry local, ao ensaio e ao destino definitivo. Esse arquivo não tem variáveis e por isso pode ser versionado; o escopo `@devtrack` continua no `.npmrc` de cada ambiente.
 
 O `.npmrc` com `${DEVTRACK_REGISTRY}` não é versionado. O npm falha quando a variável referenciada não existe, e isso quebraria `npm install` em qualquer checkout sem ela.
 
@@ -40,6 +45,7 @@ O `.npmrc` com `${DEVTRACK_REGISTRY}` não é versionado. O npm falha quando a v
 
 - A Foundation e os módulos começam em `0.1.0`. Os módulos declaram peer `@devtrack/foundation-api: ^0.1.0`.
 - Em `0.x`, `^0.1.0` aceita só `0.1.x`. Uma versão menor nova da Foundation exige republicar os módulos depois que a conformidade passar contra ela.
+- `@devtrack/api-cli` é publicado deste monorepo (D9). Não tem peers e pode sair a qualquer momento; o kit de conformidade o usa como instalador canônico fora do monorepo (`DEVTRACK_API_CLI_ROOT`).
 - Ordem: primeiro a Foundation, depois os módulos. A versão da Foundation exigida pelo peer precisa existir no mesmo registry antes da publicação de um módulo.
 - Versão publicada não é removida. Um defeito se corrige com uma versão nova e `npm deprecate` na versão anterior.
 
