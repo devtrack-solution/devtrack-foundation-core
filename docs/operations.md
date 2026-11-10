@@ -61,18 +61,16 @@ O `install` faz, nesta ordem (`api-cli/README.md`):
 Qualquer falha desfaz perfil, arquivo gerado, `package.json` e lock. `uninstall` recusa se a extensão
 participa de `bindings`.
 
-**Passo manual do host (lacuna conhecida):** extensões instaladas, como `@devtrack/jwt-auth`,
+**Peer do host (automático):** extensões instaladas, como `@devtrack/jwt-auth`,
 `@devtrack/swagger-adapter` e Contacts, importam `@devtrack/foundation-api` em runtime. No host, esse
-pacote é o próprio projeto raiz e não fica em `node_modules`, e o `api-cli` instala com
-`--legacy-peer-deps`, sem trazer o peer. Até o `api-cli` e o `build:artifact` fazerem isso
-automaticamente, o host precisa de:
+pacote é o próprio projeto raiz, e o `api-cli` instala com `--legacy-peer-deps`, sem trazer o peer.
+Por isso, depois de cada `npm install`/`npm uninstall` que executa, o `api-cli` sincroniza
+`node_modules/<nome do host>` como symlink para a raiz, enquanto houver extensão selecionada que declara o
+host como peer, e o remove quando a última sai. Ele nunca sobrescreve um diretório real ou um link para
+outro destino nesse caminho: a operação falha com `HOST_LINK_CONFLICT` e é desfeita.
 
-```sh
-mkdir -p node_modules/@devtrack && ln -s ../.. node_modules/@devtrack/foundation-api
-```
-
-O link não sobrevive a `npm ci`. No artefato implantado, o passo precisa ser repetido depois do
-`npm ci --omit=dev`. Os e2e de install, removal e do ensaio de publicação fazem esse mesmo passo.
+Um `npm ci` ou `npm install` feito à mão no checkout do host poda esse link (ele não está no lock).
+O próximo `api-cli install` ou `uninstall` o recria. No artefato isso não acontece: ver a seção 4.
 
 Ressalva: `src/composition/extension-sources.ts` está vazio neste repositório. O gerador só conhece
 extensões que estão nesse registro, então o fluxo completo depende do `install` do `api-cli`
@@ -214,7 +212,16 @@ npm run test:artifact                             # testes do build (instala pac
   cd <artefato> && npm ci --omit=dev --ignore-scripts --allow-scripts=
   # o .npmrc do artefato (legacy-peer-deps=true) precisa ir junto: sem ele, o npm ci tenta baixar
   # @devtrack/foundation-api como peer das extensões instaladas
+  node dist/main.js
   ```
+
+  Não há passo depois do `npm ci`. Quando alguma extensão declara o host como peer, o `package.json` do
+  artefato traz `"@devtrack/foundation-api": "file:."` e o mapa `exports` do host. O lock registra essa
+  entrada como link para a raiz (`resolved: ""`), e o próprio `npm ci` recria
+  `node_modules/@devtrack/foundation-api -> ../..`, sem script e sem rede. As extensões resolvem
+  `@devtrack/foundation-api/nest`, `/contracts` e `/native/*` para o `dist/` do artefato, a mesma instância
+  carregada por `dist/main.js`. A verificação aceita no lock só esse link para a raiz. Qualquer outro link
+  reprova. O link não entra em `packages` do inventário porque não é pacote baixado e não tem `integrity`.
 
 - Só são copiados `src/core`, `src/contracts`, `src/composition`, os quatro arquivos de bootstrap
   (`main.ts`, `app.module.ts`, `app.controller.ts`, `app.service.ts`), `src/worker.ts` (só com

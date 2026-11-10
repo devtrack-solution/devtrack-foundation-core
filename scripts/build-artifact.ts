@@ -109,6 +109,10 @@ export interface LockEntry {
   readonly integrity?: string;
   /** Opcional de plataforma (ex.: binários nativos de outro SO): o npm pode não instalar. */
   readonly optional?: boolean;
+  /** Entrada de link (`file:` de diretório): não é pacote baixado e não tem integrity. */
+  readonly link?: boolean;
+  /** Destino do link relativo à raiz do lock (`""` é a própria raiz). */
+  readonly resolved?: string;
 }
 
 export interface PackageLock {
@@ -135,6 +139,8 @@ export function readPackageLock(file: string): PackageLock {
       integrity:
         typeof entry.integrity === 'string' ? entry.integrity : undefined,
       optional: entry.optional === true,
+      link: entry.link === true,
+      resolved: typeof entry.resolved === 'string' ? entry.resolved : undefined,
     };
   }
   return { packages };
@@ -252,15 +258,19 @@ interface TreeNode {
 function collectTree(
   dependencies: Readonly<Record<string, TreeNode>> | undefined,
   parentPath: string,
-  lockKeys: ReadonlySet<string>,
+  lock: PackageLock,
   out: Map<string, { path: string; name: string; version: string }>,
 ): void {
+  const lockKeys = new Set(Object.keys(lock.packages));
   for (const [name, node] of Object.entries(dependencies ?? {})) {
     if (node.version === undefined) continue;
     const lockPath = resolveLockPath(parentPath, name, lockKeys);
+    // Link (o próprio host, ver hostSelfDependency) não é pacote de terceiro: fica fora do
+    // inventário e não é percorrido (seus filhos são a própria raiz).
+    if (lock.packages[lockPath]?.link === true) continue;
     if (!out.has(lockPath))
       out.set(lockPath, { path: lockPath, name, version: node.version });
-    collectTree(node.dependencies, lockPath, lockKeys, out);
+    collectTree(node.dependencies, lockPath, lock, out);
   }
 }
 
@@ -303,13 +313,20 @@ export function verifyArtifact(root: string): void {
   const inventoryPaths = new Set(inventory.packages.map((pkg) => pkg.path));
   // Opcionais de plataforma que o npm não instalou neste SO ficam no lock sem
   // aparecer em `npm ls`. Só essas são ignoradas; qualquer outro pacote faltando reprova.
-  for (const key of Object.keys(lockEntries))
-    if (
-      key !== '' &&
-      !inventoryPaths.has(key) &&
-      lockEntries[key]?.optional !== true
-    )
+  // O único link aceito é o do host para a raiz do próprio artefato (resolved "").
+  for (const key of Object.keys(lockEntries)) {
+    if (key === '') continue;
+    const entry = lockEntries[key];
+    if (entry?.link === true) {
+      if (entry.resolved !== '')
+        failures.push(
+          `lock ${key} links to ${entry.resolved ?? '(unknown)'}, outside the artifact root`,
+        );
+      continue;
+    }
+    if (!inventoryPaths.has(key) && entry?.optional !== true)
       failures.push(`lock ${key} is missing from the inventory`);
+  }
 
   const forbidden = [
     ...inventory.excludedPackages.map((pkg) => ({
@@ -429,6 +446,9 @@ export function buildArtifact(options: BuildOptions): ArtifactInventory {
     addOwner(extension.packageName, `extension:${extension.id}`);
   }
 
+  const hostLink = hostSelfDependency(profile.extensions);
+  if (hostLink !== undefined) dependencies[hostLink.name] = 'file:.';
+
   const work = prepareWorkdir(options.workDir);
   const entrypoints = ['main'];
   try {
@@ -483,6 +503,7 @@ export function buildArtifact(options: BuildOptions): ArtifactInventory {
           private: true,
           license: 'UNLICENSED',
           main: 'dist/main.js',
+          ...(hostLink === undefined ? {} : { exports: hostLink.exports }),
           scripts: { start: 'node dist/main.js' },
           dependencies: sortObject(dependencies),
         },
@@ -566,12 +587,7 @@ export function buildArtifact(options: BuildOptions): ArtifactInventory {
       string,
       { path: string; name: string; version: string }
     >();
-    collectTree(
-      tree.dependencies,
-      '',
-      new Set(Object.keys(lock.packages)),
-      installedMap,
-    );
+    collectTree(tree.dependencies, '', lock, installedMap);
     const installed = [...installedMap.values()];
 
     const installedNames = new Set(installed.map((entry) => entry.name));
@@ -670,6 +686,48 @@ export function buildArtifact(options: BuildOptions): ArtifactInventory {
   } finally {
     if (work.temporary) fs.rmSync(work.dir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Extensões importam o host pelo nome (`@devtrack/foundation-api/nest`, `/contracts`...).
+ * No artefato, o host é a raiz: a dependência `"<host>": "file:."` faz o npm registrar um
+ * link para a raiz no lock e recriá-lo em `npm ci`, sem script e sem passo manual. O
+ * `exports` do host vai junto para os subpaths resolverem no `dist/` do artefato.
+ * Só entra quando alguma extensão declara o host como peer; manifesto ausente do
+ * node_modules do host conta como dependente (as extensões oficiais dependem).
+ */
+function hostSelfDependency(
+  extensions: readonly { readonly packageName: string }[],
+): { readonly name: string; readonly exports: unknown } | undefined {
+  const host = readJson(path.join(HOST_ROOT, 'package.json'));
+  if (!isRecord(host) || typeof host.name !== 'string')
+    throw new ArtifactBuildError(
+      'ARTIFACT_HOST_INVALID',
+      'host package.json has no name',
+    );
+  const hostName = host.name;
+  const dependent = extensions.some(({ packageName }) => {
+    const manifest = path.join(
+      HOST_ROOT,
+      'node_modules',
+      ...packageName.split('/'),
+      'package.json',
+    );
+    if (!fs.existsSync(manifest)) return true;
+    const data = readJson(manifest);
+    return (
+      isRecord(data) &&
+      isRecord(data.peerDependencies) &&
+      Object.prototype.hasOwnProperty.call(data.peerDependencies, hostName)
+    );
+  });
+  if (!dependent) return undefined;
+  if (!isRecord(host.exports))
+    throw new ArtifactBuildError(
+      'ARTIFACT_HOST_INVALID',
+      `host package.json has no exports map; extensions cannot resolve ${hostName}`,
+    );
+  return { name: hostName, exports: host.exports };
 }
 
 function captureNpmTree(root: string): string {

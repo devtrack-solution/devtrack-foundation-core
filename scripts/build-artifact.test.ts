@@ -445,3 +445,42 @@ void describe('artifact: entrypoint do worker', () => {
     },
   );
 });
+
+void describe('artifact: link do host no lock', () => {
+  void it(
+    'accepts only a lock link to the artifact root; any other link fails verification',
+    SLOW,
+    () => {
+      const { out } = build(writeProfile('host-link', []), 'host-link');
+      const manifest = JSON.parse(
+        fs.readFileSync(path.join(out, 'package.json'), 'utf8'),
+      ) as { dependencies: Record<string, string>; exports?: unknown };
+      assert.equal(
+        manifest.dependencies['@devtrack/foundation-api'],
+        undefined,
+        'without extensions the artifact needs no host self-dependency',
+      );
+      assert.equal(manifest.exports, undefined);
+
+      const withLink = (label: string, resolved: string): string => {
+        const dir = path.join(base, label);
+        fs.cpSync(out, dir, { recursive: true });
+        const lockPath = path.join(dir, 'package-lock.json');
+        const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as {
+          packages: Record<string, unknown>;
+        };
+        lock.packages['node_modules/@devtrack/foundation-api'] = {
+          resolved,
+          link: true,
+        };
+        fs.writeFileSync(lockPath, JSON.stringify(lock, null, 2));
+        return dir;
+      };
+      assert.doesNotThrow(() => verifyArtifact(withLink('host-link-root', '')));
+      assert.throws(
+        () => verifyArtifact(withLink('host-link-outside', '../outside')),
+        /lock node_modules\/@devtrack\/foundation-api links to \.\.\/outside, outside the artifact root/,
+      );
+    },
+  );
+});
