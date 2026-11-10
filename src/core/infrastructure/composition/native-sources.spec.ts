@@ -107,7 +107,7 @@ describe('native runtime dependency declarations', () => {
 describe('resolveArtifactDependencies', () => {
   const catalog = {
     'native/fixture-storage': { runtimePackages: ['fixture-storage-sdk'] },
-    'native/jwt-auth': { runtimePackages: ['jose'] },
+    'native/fixture-token': { runtimePackages: ['fixture-token-sdk'] },
   };
 
   it('includes a selected native package and its core packages', () => {
@@ -117,7 +117,7 @@ describe('resolveArtifactDependencies', () => {
       corePackages: ['rxjs'],
     });
     expect(plan.runtimePackages).toEqual(['fixture-storage-sdk', 'rxjs']);
-    expect(plan.excludedPackages).toEqual(['jose']);
+    expect(plan.excludedPackages).toEqual(['fixture-token-sdk']);
   });
 
   it('excludes the package of a native that was not selected', () => {
@@ -127,7 +127,10 @@ describe('resolveArtifactDependencies', () => {
       corePackages: ['rxjs'],
     });
     expect(plan.runtimePackages).toEqual(['rxjs']);
-    expect(plan.excludedPackages).toEqual(['fixture-storage-sdk', 'jose']);
+    expect(plan.excludedPackages).toEqual([
+      'fixture-storage-sdk',
+      'fixture-token-sdk',
+    ]);
   });
 
   it('does not exclude a package still required by a selected native or the core', () => {

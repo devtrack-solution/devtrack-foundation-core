@@ -3,11 +3,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { ResolvedComposition } from '../../application/modules/module-descriptor';
 import { NATIVE_SOURCES } from './native-sources';
-import type { ExtensionSource } from './composition-profile';
+import type {
+  ExtensionComposition,
+  ExtensionSource,
+} from './composition-profile';
 import { resolveCompositionProfile } from './composition-profile';
 
 export type CompositionGenerationErrorCode =
-  'GENERATED_STALE' | 'GENERATOR_UNSUPPORTED_MODULE';
+  | 'GENERATED_STALE'
+  | 'GENERATOR_INVALID_EXTENSION'
+  | 'GENERATOR_UNSUPPORTED_MODULE';
 
 export class CompositionGenerationError extends Error {
   constructor(
@@ -25,14 +30,47 @@ const HOST_TOKEN_NAMES = {
   cacheRedisOptions: 'cache-redis.options',
   clock: 'clock',
   identities: 'identities',
-  jwtAuthOptions: 'jwt-auth.options',
   jobIdentityResolver: 'job-identity-resolver',
   persistenceOptions: 'persistence.options',
   queueBullmqOptions: 'queue-bullmq.options',
   sessions: 'sessions',
-  swaggerOptions: 'swagger.options',
 } as const;
-type HostTokenName = keyof typeof HOST_TOKEN_NAMES;
+
+const HOST_TOKEN_PATTERN = /^[a-z0-9]+(?:[.-][a-z0-9]+)*$/;
+const TS_IDENTIFIER = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+/** Revalida o bloco `composition` de uma extensão antes de emitir qualquer import (D7). */
+function validateExtensionComposition(
+  source: ExtensionSource,
+): ExtensionComposition | undefined {
+  const composition = source.composition;
+  if (composition === undefined) return undefined;
+  const id = source.descriptor.id;
+  const invalid = (detail: string) =>
+    new CompositionGenerationError(
+      'GENERATOR_INVALID_EXTENSION',
+      `Extension ${id} has an invalid composition block: ${detail}`,
+    );
+  const options = composition.hostOptions;
+  if (options !== undefined) {
+    if (!HOST_TOKEN_PATTERN.test(options.token))
+      throw invalid(`host token "${options.token}"`);
+    if (!TS_IDENTIFIER.test(options.type))
+      throw invalid(`options type "${options.type}"`);
+  }
+  const provided = new Set(
+    source.descriptor.provides.map(({ id: cap }) => cap),
+  );
+  for (const [capability, token] of Object.entries(
+    composition.capabilityTokens ?? {},
+  )) {
+    if (!provided.has(capability))
+      throw invalid(`capability "${capability}" is not provided`);
+    if (!TS_IDENTIFIER.test(token))
+      throw invalid(`capability token "${token}"`);
+  }
+  return composition;
+}
 
 const HEADER =
   '// gerado — não editar. Fonte: config/composition.yaml. Regenere com `npm run compose`.';
@@ -121,7 +159,21 @@ export function renderComposition(
     (type ? entry.types : entry.values).add(name);
     imports.set(specifier, entry);
   };
-  const hostTokens = new Set<HostTokenName>();
+  // Chave em COMPOSITION_HOST_TOKENS → nome do token e módulo dono.
+  const hostTokens = new Map<string, { token: string; owner: string }>();
+  const useHostToken = (key: string, token: string, owner: string) => {
+    const current = hostTokens.get(key);
+    if (
+      current !== undefined &&
+      (current.token !== token || current.owner !== owner)
+    )
+      throw new CompositionGenerationError(
+        'GENERATOR_INVALID_EXTENSION',
+        `Host token ${key} is declared by both ${current.owner} (${current.token}) and ${owner} (${token})`,
+      );
+    hostTokens.set(key, { token, owner });
+    return key;
+  };
   const declarations: string[] = [];
   const variables = new Map<string, string>();
   addImport('@nestjs/common', 'Module');
@@ -135,9 +187,22 @@ export function renderComposition(
           'GENERATOR_UNSUPPORTED_MODULE',
           `Extension ${id} must have npm origin`,
         );
+      const composition = validateExtensionComposition(extension);
       const alias = `${camel(id)}Module`;
       addImport(origin.packageName, `${extension.exportName} as ${alias}`);
-      variables.set(id, alias);
+      const hostOptions = composition?.hostOptions;
+      if (hostOptions === undefined) {
+        variables.set(id, alias);
+        continue;
+      }
+      // A configuração vem do host por token declarado no descriptor; o perfil nunca a contém.
+      const key = useHostToken(camel(hostOptions.token), hostOptions.token, id);
+      addImport(origin.packageName, hostOptions.type, true);
+      const variable = camel(id);
+      declarations.push(
+        `const ${variable} = ${alias}.registerAsync({ inject: [COMPOSITION_HOST_TOKENS.${key}], useFactory: (options: unknown) => options as ${hostOptions.type} });`,
+      );
+      variables.set(id, variable);
       continue;
     }
 
@@ -153,37 +218,27 @@ export function renderComposition(
     const specifier = specifierFrom(outputPath, source.importPath);
     addImport(specifier, source.exportName);
 
-    if (id === 'native/jwt-auth') {
-      // A configuração de chaves vem do host por token; o perfil nunca a contém.
-      hostTokens.add('jwtAuthOptions');
-      addImport(specifier, 'JwtAuthOptions', true);
-      declarations.push(
-        `const ${variable} = JwtAuthModule.registerAsync({ inject: [COMPOSITION_HOST_TOKENS.jwtAuthOptions], useFactory: (options: unknown) => options as JwtAuthOptions });`,
-      );
-    } else if (id === 'native/swagger-adapter') {
-      // Título e versão vêm do host por token; o perfil nunca os contém.
-      hostTokens.add('swaggerOptions');
-      addImport(specifier, 'SwaggerAdapterOptions', true);
-      declarations.push(
-        `const ${variable} = SwaggerAdapterModule.registerAsync({ inject: [COMPOSITION_HOST_TOKENS.swaggerOptions], useFactory: (options: unknown) => options as SwaggerAdapterOptions });`,
-      );
-    } else if (id === 'native/aws-s3') {
+    if (id === 'native/aws-s3') {
       // Credenciais ficam na cadeia padrão do SDK; o host fornece região, bucket e limites por token.
-      hostTokens.add('awsS3Options');
+      useHostToken('awsS3Options', HOST_TOKEN_NAMES.awsS3Options, id);
       addImport(specifier, 'AwsS3Options', true);
       declarations.push(
         `const ${variable} = AwsS3Module.registerAsync({ inject: [COMPOSITION_HOST_TOKENS.awsS3Options], useFactory: (options: unknown) => options as AwsS3Options });`,
       );
     } else if (id === 'native/cache-redis') {
       // Host e credenciais de Redis vêm do host por token; o perfil não os contém.
-      hostTokens.add('cacheRedisOptions');
+      useHostToken('cacheRedisOptions', HOST_TOKEN_NAMES.cacheRedisOptions, id);
       addImport(specifier, 'RedisCacheConfig', true);
       declarations.push(
         `const ${variable} = CacheRedisModule.registerAsync({ inject: [COMPOSITION_HOST_TOKENS.cacheRedisOptions], useFactory: (config: unknown) => config as RedisCacheConfig });`,
       );
     } else if (id === 'native/persistence-typeorm') {
       // O catálogo é a lista da Foundation; só a configuração de conexão vem do host.
-      hostTokens.add('persistenceOptions');
+      useHostToken(
+        'persistenceOptions',
+        HOST_TOKEN_NAMES.persistenceOptions,
+        id,
+      );
       addImport(specifier, 'PERSISTENCE_CONTRIBUTIONS');
       addImport(specifier, 'PersistenceConfigInput', true);
       declarations.push(
@@ -217,8 +272,16 @@ export function renderComposition(
       addImport(specifier, 'ACTIVITY_STORE');
       addImport(specifier, 'JOB_IDENTITY_RESOLVER');
       addImport(specifier, 'QueueBullmqOptions', true);
-      hostTokens.add('queueBullmqOptions');
-      hostTokens.add('jobIdentityResolver');
+      useHostToken(
+        'queueBullmqOptions',
+        HOST_TOKEN_NAMES.queueBullmqOptions,
+        id,
+      );
+      useHostToken(
+        'jobIdentityResolver',
+        HOST_TOKEN_NAMES.jobIdentityResolver,
+        id,
+      );
       declarations.push(
         `const ${variable} = QueueBullmqModule.registerAsync({ imports: [${persistenceImports.join(', ')}], inject: [COMPOSITION_HOST_TOKENS.queueBullmqOptions], useFactory: (options: unknown) => options as QueueBullmqOptions, ports: [{ provide: ACTIVITY_STORE, useClass: TypeOrmActivityStore }, { provide: JOB_IDENTITY_RESOLVER, inject: [COMPOSITION_HOST_TOKENS.jobIdentityResolver], useFactory: (identities: unknown) => identities }] });`,
       );
@@ -229,23 +292,17 @@ export function renderComposition(
       const tokenBinding = ownBindings.find(
         (binding) => binding.capabilityId === 'access-token',
       );
-      const providerSource =
+      const tokenSource =
         tokenBinding === undefined
           ? undefined
-          : NATIVE_SOURCES[tokenBinding.providerId];
-      const tokenName =
-        providerSource?.kind === 'nest'
-          ? providerSource.capabilityTokens?.['access-token']
-          : undefined;
-      if (providerSource?.kind !== 'nest' || tokenName === undefined)
+          : accessTokenSource(tokenBinding.providerId, extensions, outputPath);
+      if (tokenSource === undefined)
         throw new CompositionGenerationError(
           'GENERATOR_UNSUPPORTED_MODULE',
           `${id} has no access-token token source`,
         );
-      addImport(
-        specifierFrom(outputPath, providerSource.importPath),
-        tokenName,
-      );
+      const tokenName = tokenSource.tokenName;
+      addImport(tokenSource.specifier, tokenName);
       // Providers vêm antes do consumidor na ordem resolvida; o mesmo objeto de módulo é reutilizado.
       const providerImports = [
         ...new Set(
@@ -260,9 +317,9 @@ export function renderComposition(
           }),
         ),
       ];
-      hostTokens.add('sessions');
-      hostTokens.add('identities');
-      hostTokens.add('clock');
+      useHostToken('sessions', HOST_TOKEN_NAMES.sessions, id);
+      useHostToken('identities', HOST_TOKEN_NAMES.identities, id);
+      useHostToken('clock', HOST_TOKEN_NAMES.clock, id);
       declarations.push(
         `const ${variable} = FoundationCoreModule.withHttpSecurity({ imports: [${providerImports.join(', ')}], ports: { tokens: ${tokenName}, sessions: COMPOSITION_HOST_TOKENS.sessions, identities: COMPOSITION_HOST_TOKENS.identities, clock: COMPOSITION_HOST_TOKENS.clock } });`,
       );
@@ -302,11 +359,11 @@ export function renderComposition(
       return lines;
     });
 
-  const tokenEntries = [...hostTokens]
+  const tokenEntries = [...hostTokens.keys()]
     .sort(compare)
     .map(
-      (name) =>
-        `${name}: Symbol.for('foundation.api.v1.host.${HOST_TOKEN_NAMES[name]}')`,
+      (key) =>
+        `${key}: Symbol.for('foundation.api.v1.host.${hostTokens.get(key)?.token}')`,
     );
   const metadata = {
     foundationApiMajor: resolved.foundationApiMajor,
@@ -333,6 +390,31 @@ export function renderComposition(
   ].join('\n');
 
   return { resolved, source: formatTypeScript(source) };
+}
+
+/** Export que entrega `access-token`, procurado entre nativos e extensões selecionadas. */
+function accessTokenSource(
+  providerId: string,
+  extensions: readonly ExtensionSource[],
+  outputPath: string,
+): { readonly specifier: string; readonly tokenName: string } | undefined {
+  const native = NATIVE_SOURCES[providerId];
+  if (native?.kind === 'nest') {
+    const tokenName = native.capabilityTokens?.['access-token'];
+    return tokenName === undefined
+      ? undefined
+      : { specifier: specifierFrom(outputPath, native.importPath), tokenName };
+  }
+  const extension = extensions.find(
+    (source) => source.descriptor.id === providerId,
+  );
+  if (extension === undefined || extension.descriptor.origin.kind !== 'npm')
+    return undefined;
+  const tokenName =
+    validateExtensionComposition(extension)?.capabilityTokens?.['access-token'];
+  return tokenName === undefined
+    ? undefined
+    : { specifier: extension.descriptor.origin.packageName, tokenName };
 }
 
 function compare(a: string, b: string): number {

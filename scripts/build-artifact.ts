@@ -517,13 +517,23 @@ export function buildArtifact(options: BuildOptions): ArtifactInventory {
     fs.rmSync(path.join(root, 'scripts'), { recursive: true, force: true });
     fs.rmSync(path.join(root, 'config'), { recursive: true, force: true });
 
+    // O artefato carrega a mesma regra de peers para quem roda `npm ci` nele (implantação e rollback).
+    fs.writeFileSync(
+      path.join(root, '.npmrc'),
+      '# Gerado por build:artifact: peers das extensões (inclusive @devtrack/foundation-api, o próprio host)\n# foram validados pelo api-cli; o npm não deve buscá-los no registry.\nlegacy-peer-deps=true\n',
+      'utf8',
+    );
     // "--allow-scripts=" anula a allowlist do usuario (npm 11 recusa essa opcao em instalacao de projeto); --ignore-scripts impede qualquer script.
+    // --legacy-peer-deps: o peer @devtrack/foundation-api das extensões é o próprio host, que o npm não
+    // reconhece como instalado e tentaria baixar do registry. Os peers das extensões já foram validados
+    // pelo api-cli na instalação (mesma regra do `api-cli install`); o lock do host continua mandando.
     run(
       npmBin(),
       [
         'install',
         '--omit=dev',
         '--ignore-scripts',
+        '--legacy-peer-deps',
         '--allow-scripts=',
         '--no-audit',
         '--no-fund',
@@ -649,6 +659,7 @@ export function buildArtifact(options: BuildOptions): ArtifactInventory {
       recursive: true,
     });
     for (const file of [
+      '.npmrc',
       'package.json',
       'package-lock.json',
       ARTIFACT_INVENTORY_FILE,

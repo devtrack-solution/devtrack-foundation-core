@@ -61,6 +61,19 @@ O `install` faz, nesta ordem (`api-cli/README.md`):
 Qualquer falha desfaz perfil, arquivo gerado, `package.json` e lock. `uninstall` recusa se a extensão
 participa de `bindings`.
 
+**Passo manual do host (lacuna conhecida):** extensões instaladas, como `@devtrack/jwt-auth`,
+`@devtrack/swagger-adapter` e Contacts, importam `@devtrack/foundation-api` em runtime. No host, esse
+pacote é o próprio projeto raiz e não fica em `node_modules`, e o `api-cli` instala com
+`--legacy-peer-deps`, sem trazer o peer. Até o `api-cli` e o `build:artifact` fazerem isso
+automaticamente, o host precisa de:
+
+```sh
+mkdir -p node_modules/@devtrack && ln -s ../.. node_modules/@devtrack/foundation-api
+```
+
+O link não sobrevive a `npm ci`. No artefato implantado, o passo precisa ser repetido depois do
+`npm ci --omit=dev`. Os e2e de install, removal e do ensaio de publicação fazem esse mesmo passo.
+
 Ressalva: `src/composition/extension-sources.ts` está vazio neste repositório. O gerador só conhece
 extensões que estão nesse registro, então o fluxo completo depende do `install` do `api-cli`
 (**não ensaiado** nesta entrega; coberto pelos testes do `api-cli` com Verdaccio e por
@@ -93,9 +106,13 @@ extensions: []        # id, packageName, version (exata), integrity (sha...), fe
 - O perfil não aceita campo com nome de segredo (`secret`, `password`, `token`, `apikey`,
   `credential`, `privatekey`, `keymaterial`). A validação falha com `PROFILE_SECRET_FIELD`.
   Credenciais e chaves vêm do host, nunca do perfil.
-- Ids de nativo aceitos: `native/http-security`, `native/jwt-auth`, `native/swagger-adapter`,
+- Ids de nativo aceitos: `native/http-security`,
   `native/aws-s3`, `native/cache-redis`, `native/queue-bullmq`, `native/persistence-typeorm`,
-  `native/opentelemetry` (`src/core/infrastructure/composition/native-sources.ts`).
+  `native/opentelemetry` (`src/core/infrastructure/composition/native-sources.ts`). JWT Auth e Swagger são as
+  extensões `ext/jwt-auth` e `ext/swagger-adapter` (pacotes `@devtrack/jwt-auth` e `@devtrack/swagger-adapter`),
+  instaladas pelo `api-cli`. Perfis antigos com `native/jwt-auth` ou `native/swagger-adapter` falham com
+  `PROFILE_UNKNOWN_NATIVE`: mova a entrada para `extensions` depois de
+  instalar o pacote.
 - Ids que começam com `native/` não podem ser extensões.
 
 ### 3.2 Gerador: `npm run compose`
@@ -115,8 +132,8 @@ O módulo gerado usa tokens que o **host** precisa fornecer. Ele não os provê 
 
 | Token (`COMPOSITION_HOST_TOKENS.`) | Símbolo | Nativo que exige |
 | --- | --- | --- |
-| `jwtAuthOptions` | `jwt-auth.options` | `native/jwt-auth` |
-| `swaggerOptions` | `swagger.options` | `native/swagger-adapter` (título, versão e caminho; sem eles o boot falha) |
+| `jwtAuthOptions` | `jwt-auth.options` | extensão `ext/jwt-auth` (declarado no bloco `composition` do descriptor) |
+| `swaggerOptions` | `swagger.options` | extensão `ext/swagger-adapter` (título, versão e caminho; sem eles o boot falha) |
 | `awsS3Options` | `aws-s3.options` | `native/aws-s3` |
 | `cacheRedisOptions` | `cache-redis.options` | `native/cache-redis` |
 | `persistenceOptions` | `persistence.options` | `native/persistence-typeorm` (configuração de `FOUNDATION_DB_*`, seção 3.4) |
@@ -195,6 +212,8 @@ npm run test:artifact                             # testes do build (instala pac
 
   ```sh
   cd <artefato> && npm ci --omit=dev --ignore-scripts --allow-scripts=
+  # o .npmrc do artefato (legacy-peer-deps=true) precisa ir junto: sem ele, o npm ci tenta baixar
+  # @devtrack/foundation-api como peer das extensões instaladas
   ```
 
 - Só são copiados `src/core`, `src/contracts`, `src/composition`, os quatro arquivos de bootstrap
@@ -481,7 +500,7 @@ Passos do guia **não ensaiados** e por quê:
 - rollback de artefato entre duas versões, reinstalação de extensão anterior e revert em cadeia (seção 9);
 - backup antes do revert e revert com dados (seção 9.3);
 - `FOUNDATION_DB_MIGRATIONS_RUN=true` no boot (seção 5.2);
-- Redis, `queue-bullmq`, `cache-redis`, `jwt-auth`, `swagger-adapter` e `opentelemetry` (fora do perfil ensaiado).
+- Redis, `queue-bullmq`, `cache-redis`, `ext/jwt-auth`, `ext/swagger-adapter` e `opentelemetry` (fora do perfil ensaiado).
 
 ## 13. Achados do ensaio para a equipe
 

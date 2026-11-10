@@ -47,16 +47,12 @@ function protectedSource(
 const protectedDemo = protectedSource();
 const plainDemo = protectedSource('ext/plain-demo', false);
 
+/** http-security com o access-token vindo de uma extensão npm (papel do antigo native/jwt-auth). */
 const withSecurity = `foundationApiMajor: 1
 natives:
   - id: native/http-security
-  - id: native/jwt-auth
 extensions:
-  - id: ext/protected-demo
-    packageName: fixture-protected-demo
-    version: 1.0.0
-    integrity: ${INTEGRITY}
-`;
+${extensionEntry('ext/jwt-fixture')}${extensionEntry('ext/protected-demo')}`;
 
 /** Código do erro lançado pela ação, ou undefined quando nada é lançado. */
 function thrownCode(action: () => unknown): unknown {
@@ -88,20 +84,34 @@ describe('composition generator', () => {
     expect(source).not.toMatch(/jwt-auth|foundation-core|import\(|require\(/);
   });
 
-  it('keeps swagger out of the default output and only imports it when selected', () => {
+  it('keeps swagger out of the default output and registers ext/swagger-adapter with the same host token', () => {
     const profile = fs.readFileSync(PROFILE_FILE, 'utf8');
     expect(renderComposition(profile, EXTENSION_SOURCES).source).not.toMatch(
       /swagger/i,
     );
+    const swagger: ExtensionSource = {
+      ...configurableSource(
+        'ext/swagger-adapter',
+        {
+          hostOptions: {
+            token: 'swagger.options',
+            type: 'SwaggerAdapterOptions',
+          },
+        },
+        [{ id: 'api-documentation', major: 1 }],
+      ),
+      exportName: 'SwaggerAdapterModule',
+    };
     const selected = `foundationApiMajor: 1
-natives:
-  - id: native/swagger-adapter
-extensions: []
-`;
-    const { source } = renderComposition(selected, EXTENSION_SOURCES);
-    expect(source).toContain(`from '../native/swagger-adapter'`);
-    expect(source).toContain('SwaggerAdapterModule.registerAsync');
-    expect(source).toContain('COMPOSITION_HOST_TOKENS.swaggerOptions');
+natives: []
+extensions:
+${extensionEntry('ext/swagger-adapter')}`;
+    const { source } = renderComposition(selected, [swagger]);
+    expect(source).toContain(`from 'fixture-swagger-adapter'`);
+    expect(source).toContain('extSwaggerAdapterModule.registerAsync');
+    expect(source).toContain(
+      `swaggerOptions: Symbol.for('foundation.api.v1.host.swagger.options')`,
+    );
     expect(source).not.toMatch(/from '@nestjs\/swagger'/);
   });
 
@@ -174,38 +184,39 @@ extensions:
     }
   });
 
-  it('resolves the protected extension with http-security and jwt-auth and imports them statically', () => {
+  it('resolves the protected extension with http-security and an access-token extension and imports them statically', () => {
     const { source, resolved } = renderComposition(withSecurity, [
+      jwtFixture,
       protectedDemo,
     ]);
     expect(resolved.orderedModuleIds).toEqual([
-      'native/jwt-auth',
+      'ext/jwt-fixture',
       'native/http-security',
       'ext/protected-demo',
     ]);
-    expect(source).toContain(`from '../native/jwt-auth'`);
+    expect(source).toContain(`from 'fixture-jwt-fixture'`);
     expect(source).toContain(
       `from '../core/infrastructure/modules/foundation-core.module'`,
     );
     expect(source).toContain(`from 'fixture-protected-demo'`);
     expect(source).toContain('FoundationCoreModule.withHttpSecurity');
-    expect(source).toContain('COMPOSITION_HOST_TOKENS.jwtAuthOptions');
+    expect(source).toContain('COMPOSITION_HOST_TOKENS.jwtFixtureOptions');
     expect(source).toContain('COMPOSITION_HOST_TOKENS.sessions');
     expect(source).not.toMatch(/import\(|require\(/);
   });
 
   it('imports only the selected natives', () => {
-    const jwtOnly = `foundationApiMajor: 1
+    const s3Only = `foundationApiMajor: 1
 natives:
-  - id: native/jwt-auth
+  - id: native/aws-s3
 extensions:
   - id: ext/plain-demo
     packageName: fixture-plain-demo
     version: 1.0.0
     integrity: ${INTEGRITY}
 `;
-    const { source } = renderComposition(jwtOnly, [plainDemo]);
-    expect(source).toContain(`from '../native/jwt-auth'`);
+    const { source } = renderComposition(s3Only, [plainDemo]);
+    expect(source).toContain(`from '../native/aws-s3'`);
     expect(source).not.toContain('foundation-core');
     expect(source).not.toContain('withHttpSecurity');
   });
@@ -230,18 +241,21 @@ extensions:
 bindings:
   - consumer: native/http-security
     capability: access-token
-    provider: native/jwt-auth
+    provider: ext/jwt-fixture
 extensions:
   - id: ext/protected-demo
     integrity: ${INTEGRITY}
     version: 1.0.0
     packageName: fixture-protected-demo
+  - id: ext/jwt-fixture
+    integrity: ${INTEGRITY}
+    version: 1.0.0
+    packageName: fixture-jwt-fixture
 natives:
-  - id: native/jwt-auth
   - id: native/http-security
 `;
-    const first = renderComposition(withSecurity, [protectedDemo]);
-    const second = renderComposition(reordered, [protectedDemo]);
+    const first = renderComposition(withSecurity, [jwtFixture, protectedDemo]);
+    const second = renderComposition(reordered, [protectedDemo, jwtFixture]);
     expect(second.source).toBe(first.source);
   });
 
@@ -251,7 +265,7 @@ natives:
     try {
       const options = {
         profileSource: withSecurity,
-        extensions: [protectedDemo],
+        extensions: [jwtFixture, protectedDemo],
         outputPath,
       };
       expect(
@@ -275,6 +289,142 @@ natives:
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
+  });
+});
+
+function configurableSource(
+  id: string,
+  composition: ExtensionSource['composition'],
+  provides = [{ id: 'access-token', major: 1 }],
+): ExtensionSource {
+  return {
+    descriptor: {
+      id,
+      foundationApiMajor: 1,
+      origin: {
+        kind: 'npm',
+        packageName: `fixture-${id.replace('ext/', '')}`,
+        version: '1.0.0',
+        integrity: INTEGRITY,
+      },
+      provides,
+      requires: [],
+    },
+    exportName: 'JwtFixtureModule',
+    composition,
+  };
+}
+
+function extensionEntry(id: string): string {
+  return `  - id: ${id}
+    packageName: fixture-${id.replace('ext/', '')}
+    version: 1.0.0
+    integrity: ${INTEGRITY}
+`;
+}
+
+const jwtFixture = configurableSource('ext/jwt-fixture', {
+  hostOptions: { token: 'jwt-fixture.options', type: 'JwtFixtureOptions' },
+  capabilityTokens: { 'access-token': 'JWT_FIXTURE_VERIFIER' },
+});
+
+const securityWithExtensionToken = `foundationApiMajor: 1
+natives:
+  - id: native/http-security
+extensions:
+${extensionEntry('ext/jwt-fixture')}${extensionEntry('ext/protected-demo')}`;
+
+describe('configurable npm extensions (composition block)', () => {
+  it('registers the extension with host options declared in its descriptor', () => {
+    const { source } = renderComposition(securityWithExtensionToken, [
+      jwtFixture,
+      protectedDemo,
+    ]);
+    expect(source).toMatch(
+      /import \{\s*JWT_FIXTURE_VERIFIER,\s*JwtFixtureModule as extJwtFixtureModule,?\s*\} from 'fixture-jwt-fixture';/,
+    );
+    expect(source).toContain(
+      `import type { JwtFixtureOptions } from 'fixture-jwt-fixture';`,
+    );
+    expect(source).toContain(
+      `jwtFixtureOptions: Symbol.for('foundation.api.v1.host.jwt-fixture.options')`,
+    );
+    expect(source).toMatch(
+      /const extJwtFixture = extJwtFixtureModule\.registerAsync\(\{\s*inject: \[COMPOSITION_HOST_TOKENS\.jwtFixtureOptions\],/,
+    );
+    expect(source).not.toMatch(/import\(|require\(/);
+  });
+
+  it('binds http-security to the access-token export of an extension', () => {
+    const { source, resolved } = renderComposition(securityWithExtensionToken, [
+      jwtFixture,
+      protectedDemo,
+    ]);
+    expect(resolved.bindings).toContainEqual({
+      consumerId: 'native/http-security',
+      capabilityId: 'access-token',
+      providerId: 'ext/jwt-fixture',
+    });
+    expect(source).toMatch(/imports: \[extJwtFixture\]/);
+    expect(source).toContain('tokens: JWT_FIXTURE_VERIFIER');
+  });
+
+  it('keeps the plain import for an extension without a composition block', () => {
+    const profile = `foundationApiMajor: 1
+natives: []
+extensions:
+${extensionEntry('ext/plain-demo')}`;
+    const { source } = renderComposition(profile, [plainDemo]);
+    expect(source).toContain(
+      `import { ProtectedDemoModule as extPlainDemoModule } from 'fixture-plain-demo';`,
+    );
+    expect(source).not.toContain('registerAsync');
+    expect(source).toContain('imports: [extPlainDemoModule]');
+  });
+
+  it.each([
+    [
+      'host token with invalid characters',
+      { hostOptions: { token: 'Bad Token', type: 'JwtFixtureOptions' } },
+    ],
+    [
+      'options type that is not an identifier',
+      { hostOptions: { token: 'jwt-fixture.options', type: 'a-b' } },
+    ],
+    [
+      'capability token for a capability it does not provide',
+      { capabilityTokens: { 'object-storage': 'STORAGE' } },
+    ],
+  ])('rejects a composition block with %s', (_label, composition) => {
+    const profile = `foundationApiMajor: 1
+natives: []
+extensions:
+${extensionEntry('ext/jwt-fixture')}`;
+    expect(
+      thrownCode(() =>
+        renderComposition(profile, [
+          configurableSource('ext/jwt-fixture', composition),
+        ]),
+      ),
+    ).toBe('GENERATOR_INVALID_EXTENSION');
+  });
+
+  it('rejects two extensions that declare the same host token', () => {
+    const shared = {
+      hostOptions: { token: 'shared.options', type: 'SharedOptions' },
+    };
+    const profile = `foundationApiMajor: 1
+natives: []
+extensions:
+${extensionEntry('ext/first-fixture')}${extensionEntry('ext/second-fixture')}`;
+    expect(
+      thrownCode(() =>
+        renderComposition(profile, [
+          configurableSource('ext/first-fixture', shared, []),
+          configurableSource('ext/second-fixture', shared, []),
+        ]),
+      ),
+    ).toBe('GENERATOR_INVALID_EXTENSION');
   });
 });
 

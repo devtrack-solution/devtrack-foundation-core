@@ -65,19 +65,6 @@ export const NATIVE_SOURCES: Readonly<Record<string, NativeSource>> = {
     // Código no núcleo; não há pacote npm próprio além do core.
     runtimePackages: [],
   },
-  'native/swagger-adapter': {
-    kind: 'nest',
-    importPath: '../native/swagger-adapter',
-    exportName: 'SwaggerAdapterModule',
-    runtimePackages: ['@nestjs/swagger'],
-  },
-  'native/jwt-auth': {
-    kind: 'nest',
-    importPath: '../native/jwt-auth',
-    exportName: 'JwtAuthModule',
-    capabilityTokens: { 'access-token': 'JWT_AUTH_VERIFIER' },
-    runtimePackages: ['jose'],
-  },
   'native/aws-s3': {
     kind: 'nest',
     importPath: '../native/aws-s3',

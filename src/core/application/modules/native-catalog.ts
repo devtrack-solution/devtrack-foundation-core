@@ -7,20 +7,6 @@ import type { ModuleDescriptor } from './module-descriptor';
  */
 export const NATIVE_MODULE_DESCRIPTORS: readonly ModuleDescriptor[] = [
   {
-    id: 'native/jwt-auth',
-    foundationApiMajor: 1,
-    origin: { kind: 'native' },
-    provides: [{ id: 'access-token', major: 1 }],
-    requires: [],
-  },
-  {
-    id: 'native/swagger-adapter',
-    foundationApiMajor: 1,
-    origin: { kind: 'native' },
-    provides: [{ id: 'api-documentation', major: 1 }],
-    requires: [],
-  },
-  {
     id: 'native/opentelemetry',
     foundationApiMajor: 1,
     origin: { kind: 'native' },

@@ -60,7 +60,7 @@ a composição, sem recuperar o erro habilitando um provider arbitrário.
 
 ## Catálogo, perfil e gerador
 
-- `native-catalog.ts` lista os descriptors nativos (`native/jwt-auth`, `native/http-security`). É metadata pura, sem Nest.
+- `native-catalog.ts` lista os descriptors nativos (por exemplo `native/http-security`). É metadata pura, sem Nest. O fornecedor de `access-token` é a extensão `ext/jwt-auth` (`@devtrack/jwt-auth`).
 - Módulos que expõem operações protegidas declaram `requires: [{ id: 'authenticator', major: 1 }]`. Sem um provider de `authenticator` na composição, a resolução falha com `MISSING_PROVIDER`.
 - O perfil `config/composition.yaml` é lido e validado em `src/core/infrastructure/composition/`, fora de Application. O leitor não conhece segredos e recusa chaves com nomes de segredo.
 - `npm run compose` gera `src/composition/composition.generated.ts`. Detalhes em `docs/core-contracts.md`, seções 6.6 a 6.8.

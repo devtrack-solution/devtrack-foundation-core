@@ -1,10 +1,12 @@
 {
-  "name": "foundation-api",
-  "version": "0.0.1",
-  "description": "",
+  "name": "@devtrack/foundation-api",
+  "version": "0.1.0",
+  "description": "DevTrack Foundation: core modular NestJS com contratos públicos, composição por perfil e módulos nativos.",
   "author": "",
-  "private": true,
   "license": "UNLICENSED",
+  "bin": {
+    "devtrack-check-publishable": "scripts/check-publishable.mjs"
+  },
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -28,14 +30,16 @@
     "build:artifact": "ts-node --transpile-only scripts/build-artifact.ts",
     "test:artifact": "node --require ts-node/register/transpile-only --test scripts/build-artifact.test.ts",
     "conformance": "node --require ts-node/register/transpile-only tooling/module-conformance/runner/cli.ts",
-    "test:conformance": "node --require ts-node/register/transpile-only --test tooling/module-conformance/test/kit.test.ts"
+    "test:conformance": "node --require ts-node/register/transpile-only --test tooling/module-conformance/test/kit.test.ts",
+    "check:publishable": "node scripts/check-publishable.mjs",
+    "test:publishable": "node --test scripts/check-publishable.test.mjs",
+    "prepack": "node scripts/check-publishable.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1164.0",
     "@nestjs/common": "^11.0.1",
     "@nestjs/core": "^11.0.1",
     "@nestjs/platform-express": "^11.0.1",
-    "@nestjs/swagger": "11.4.8",
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/exporter-metrics-otlp-http": "0.301.0",
     "@opentelemetry/exporter-trace-otlp-http": "0.301.0",
@@ -48,7 +52,6 @@
     "@opentelemetry/sdk-trace": "3.1.0",
     "bullmq": "6.7.2",
     "ioredis": "5.11.1",
-    "jose": "5.10.0",
     "pg": "8.23.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
@@ -110,14 +113,6 @@
       "types": "./dist/core/infrastructure/modules/foundation-core.module.d.ts",
       "default": "./dist/core/infrastructure/modules/foundation-core.module.js"
     },
-    "./native/jwt-auth": {
-      "types": "./dist/native/jwt-auth/index.d.ts",
-      "default": "./dist/native/jwt-auth/index.js"
-    },
-    "./native/swagger-adapter": {
-      "types": "./dist/native/swagger-adapter/index.d.ts",
-      "default": "./dist/native/swagger-adapter/index.js"
-    },
     "./native/opentelemetry": {
       "types": "./dist/native/opentelemetry/index.d.ts",
       "default": "./dist/native/opentelemetry/index.js"
@@ -141,6 +136,10 @@
   },
   "files": [
     "dist",
-    "README.md"
-  ]
+    "README.md",
+    "scripts/check-publishable.mjs"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
 }

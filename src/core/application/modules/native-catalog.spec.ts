@@ -6,12 +6,13 @@ import { resolveComposition } from './resolve-composition';
 import { CompositionError } from './composition-error';
 
 describe('native catalog', () => {
-  it('declares jwt-auth as the access-token provider', () => {
-    expect(findNativeDescriptor('native/jwt-auth')).toMatchObject({
-      origin: { kind: 'native' },
-      provides: [{ id: 'access-token', major: 1 }],
-      requires: [],
-    });
+  it('has no native access-token provider: JWT Auth is the official npm module ext/jwt-auth', () => {
+    expect(findNativeDescriptor('native/jwt-auth')).toBeUndefined();
+    expect(
+      NATIVE_MODULE_DESCRIPTORS.some((descriptor) =>
+        descriptor.provides.some((cap) => cap.id === 'access-token'),
+      ),
+    ).toBe(false);
   });
 
   it('declares http-security as the explicit authenticator and requires access-token', () => {

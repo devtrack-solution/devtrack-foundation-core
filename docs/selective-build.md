@@ -47,24 +47,25 @@ Regra da arquitetura (design, seção 3): runtime pode desligar o que já foi in
   "node": { "version": "v24.21.0" },
   "entrypoints": ["main", "worker"],
   "modules": {
-    "selected": [{ "id": "native/jwt-auth", "features": [] }],
-    "excludedFromBuild": ["native/opentelemetry", "native/swagger-adapter"],
+    "selected": [{ "id": "native/aws-s3", "features": [] }],
+    "excludedFromBuild": ["native/opentelemetry"],
     "disabledAtRuntime": []
   },
-  "excludedPackages": [{ "name": "jose", "owner": "native/jwt-auth" }],
+  "excludedPackages": [{ "name": "@opentelemetry/sdk-node", "owner": "native/opentelemetry" }],
   "neverInArtifact": ["prettier", "ts-node", "typescript"],
   "packages": [
     {
-      "name": "jose",
-      "version": "5.10.0",
+      "name": "@aws-sdk/client-s3",
+      "version": "3.1164.0",
       "integrity": "sha512-...",
-      "path": "node_modules/jose",
-      "directOf": ["native/jwt-auth"]
+      "path": "node_modules/@aws-sdk/client-s3",
+      "directOf": ["native/aws-s3"]
     }
   ]
 }
 ```
 
+- O artefato inclui um `.npmrc` com `legacy-peer-deps=true`. O peer `@devtrack/foundation-api` das extensões (como `@devtrack/jwt-auth`) é o próprio host, que o npm não reconhece como instalado e tentaria baixar. Os peers foram validados pelo `api-cli` na instalação. O mesmo arquivo vale para o `npm ci` de implantação e rollback.
 - `packages` vem de `npm ls --all --omit=dev --json` depois da instalação. Cada entrada traz versão e `integrity` do lock do artefato. `directOf` lista o núcleo (`core`), o nativo ou a extensão que declara o pacote como dependência direta; transitivos têm lista vazia.
 - Peers opcionais ausentes (ex.: `class-transformer` de `@nestjs/common`) aparecem no `npm ls` sem versão e não são instalados; não entram no inventário.
 - O inventário não tem timestamp: dois builds do mesmo perfil no mesmo Node produzem o mesmo arquivo (coberto por teste de determinismo).
@@ -79,8 +80,6 @@ Cada nativo declara em `NATIVE_SOURCES` (`src/core/infrastructure/composition/na
 | Nativo | `runtimePackages` | Observação |
 | --- | --- | --- |
 | `native/http-security` | nenhum | Código no núcleo. |
-| `native/jwt-auth` | `jose` | Versão exata no lock do host. |
-| `native/swagger-adapter` | `@nestjs/swagger` | Versão exata. |
 | `native/opentelemetry` | `@opentelemetry/api`, `@opentelemetry/sdk-node`, `@opentelemetry/sdk-trace`, `@opentelemetry/sdk-metrics`, `@opentelemetry/resources`, `@opentelemetry/exporter-trace-otlp-http`, `@opentelemetry/exporter-metrics-otlp-http`, `@opentelemetry/instrumentation-http`, `@opentelemetry/instrumentation-express`, `yaml` | `yaml` é peer obrigatório de `@opentelemetry/configuration`. |
 | `native/aws-s3` | `@aws-sdk/client-s3` | Adapter de `ObjectStorage`. |
 | `native/cache-redis` | `ioredis` | Rate limit compartilhado e readiness. |
@@ -111,4 +110,4 @@ Os pacotes de tooling declarados em `TOOLING_PACKAGES` são `prettier`, `ts-node
 
 - O adapter S3 (`native/aws-s3`) existe e é selecionável pelo perfil. Os testes de artefato cobrem o mecanismo com o fixture `native/fixture-storage` em `native-sources.spec.ts`; o S3 real não é exercitado no build.
 - O build não verifica o tarball além do `integrity` do lock (a verificação de integridade do instalador é a tarefa 2.3).
-- Perfis com nativos protegidos (JWT com `http-security`) são montados e inventariados, mas não sobem: exigem tokens do host. A subida real é coberta pelos testes e2e existentes.
+- Perfis com `http-security` exigem um fornecedor de `access-token`, hoje a extensão `ext/jwt-auth`. O pacote dela e o `jose` entram no artefato como dependência da extensão instalada, não como nativo. O mesmo vale para `ext/swagger-adapter` e `@nestjs/swagger`. Esses perfis são montados e inventariados, mas não sobem sem os tokens do host. A subida real é coberta pelos testes e2e.

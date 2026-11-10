@@ -124,6 +124,11 @@ void describe('artifact: perfil mínimo', () => {
       );
       assert.deepEqual(inventory.modules.selected, []);
       assert.deepEqual(inventory.modules.disabledAtRuntime, []);
+      assert.match(
+        fs.readFileSync(path.join(out, '.npmrc'), 'utf8'),
+        /^legacy-peer-deps=true$/m,
+        'o artefato carrega a regra de peers para o npm ci de implantação',
+      );
       assert.equal(fs.existsSync(path.join(work, 'dist', 'native')), false);
       assert.equal(fs.existsSync(path.join(out, 'dist', 'native')), false);
       assert.equal(
@@ -158,16 +163,11 @@ void describe('artifact: perfil mínimo', () => {
 
 void describe('artifact: nativos selecionados', () => {
   void it(
-    'ships swagger, OTel and JWT packages at the exact host lock versions',
+    'ships S3 and OTel packages at the exact host lock versions (JWT and Swagger are npm modules)',
     SLOW,
     () => {
       const { inventory, out } = build(
-        writeProfile('full', [
-          'native/http-security',
-          'native/jwt-auth',
-          'native/opentelemetry',
-          'native/swagger-adapter',
-        ]),
+        writeProfile('full', ['native/aws-s3', 'native/opentelemetry']),
         'full',
       );
       const byName = new Map(
@@ -176,8 +176,7 @@ void describe('artifact: nativos selecionados', () => {
           .map((pkg) => [pkg.name, pkg]),
       );
       for (const name of [
-        'jose',
-        '@nestjs/swagger',
+        '@aws-sdk/client-s3',
         '@opentelemetry/sdk-node',
         '@opentelemetry/api',
       ]) {
@@ -191,20 +190,20 @@ void describe('artifact: nativos selecionados', () => {
       }
       assert.deepEqual(
         inventory.modules.selected.map((module) => module.id),
-        [
-          'native/http-security',
-          'native/jwt-auth',
-          'native/opentelemetry',
-          'native/swagger-adapter',
-        ],
+        ['native/aws-s3', 'native/opentelemetry'],
       );
+      for (const moved of ['jose', '@nestjs/swagger'])
+        assert.ok(
+          !inventory.packages.some((pkg) => pkg.name === moved),
+          `${moved} belongs to an official npm module, not to the Foundation artifact`,
+        );
       assert.deepEqual(inventory.modules.excludedFromBuild, [
-        'native/aws-s3',
         'native/cache-redis',
+        'native/http-security',
         'native/persistence-typeorm',
         'native/queue-bullmq',
       ]);
-      for (const id of ['jwt-auth', 'swagger-adapter', 'opentelemetry'])
+      for (const id of ['aws-s3', 'opentelemetry'])
         assert.ok(
           fs.existsSync(path.join(out, 'dist', 'native', id)),
           `dist/native/${id} missing`,
@@ -213,32 +212,40 @@ void describe('artifact: nativos selecionados', () => {
     },
   );
 
-  void it('with swagger only, leaves OpenTelemetry and jose out', SLOW, () => {
-    const { inventory, out, work } = build(
-      writeProfile('swagger', ['native/swagger-adapter']),
-      'swagger',
-    );
-    const names = packageNames(inventory);
-    assert.equal(names.has('@nestjs/swagger'), true);
-    assert.equal(names.has('jose'), false);
-    assert.equal(
-      [...names].some((name) => name.startsWith('@opentelemetry/')),
-      false,
-    );
-    assert.equal(names.has('yaml'), false);
-    assert.equal(fs.existsSync(path.join(work, 'node_modules', 'jose')), false);
-    assert.equal(
-      fs.existsSync(path.join(out, 'dist', 'native', 'opentelemetry')),
-      false,
-    );
-    verifyArtifact(out);
-  });
+  void it(
+    'with S3 only, leaves OpenTelemetry, Swagger and jose out',
+    SLOW,
+    () => {
+      const { inventory, out, work } = build(
+        writeProfile('s3-only', ['native/aws-s3']),
+        's3-only',
+      );
+      const names = packageNames(inventory);
+      assert.equal(names.has('@aws-sdk/client-s3'), true);
+      assert.equal(names.has('@nestjs/swagger'), false);
+      assert.equal(names.has('jose'), false);
+      assert.equal(
+        [...names].some((name) => name.startsWith('@opentelemetry/')),
+        false,
+      );
+      assert.equal(names.has('yaml'), false);
+      assert.equal(
+        fs.existsSync(path.join(work, 'node_modules', 'jose')),
+        false,
+      );
+      assert.equal(
+        fs.existsSync(path.join(out, 'dist', 'native', 'opentelemetry')),
+        false,
+      );
+      verifyArtifact(out);
+    },
+  );
 
   void it(
     'is deterministic: two builds of the same profile yield the same inventory',
     SLOW,
     () => {
-      const profile = writeProfile('deterministic', ['native/swagger-adapter']);
+      const profile = writeProfile('deterministic', ['native/aws-s3']);
       const first = build(profile, 'det-a').inventory;
       const second = build(profile, 'det-b').inventory;
       assert.deepEqual(second, first);
@@ -256,12 +263,12 @@ void describe('artifact: verificação', () => {
       fs.cpSync(out, tampered, { recursive: true });
       fs.writeFileSync(
         path.join(tampered, 'dist', 'leak.js'),
-        "require('jose');\n",
+        "require('@aws-sdk/client-s3');\n",
         'utf8',
       );
       assert.throws(
         () => verifyArtifact(tampered),
-        /jose \(excluded-from-build/,
+        /@aws-sdk\/client-s3 \(excluded-from-build/,
       );
     },
   );
@@ -309,8 +316,8 @@ void describe('artifact: S3 e isolamento de SDK', () => {
     SLOW,
     () => {
       const { inventory, out, work } = build(
-        writeProfile('swagger-no-s3', ['native/swagger-adapter']),
-        'swagger-no-s3',
+        writeProfile('redis-no-s3', ['native/cache-redis']),
+        'redis-no-s3',
       );
       assert.equal(
         [...packageNames(inventory)].some((name) =>
@@ -336,7 +343,7 @@ void describe('artifact: S3 e isolamento de SDK', () => {
     SLOW,
     () => {
       const { out } = build(
-        writeProfile('no-s3-tamper', ['native/swagger-adapter']),
+        writeProfile('no-s3-tamper', ['native/cache-redis']),
         'no-s3-tamper',
       );
       const tampered = path.join(base, 'tampered-s3');

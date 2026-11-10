@@ -68,6 +68,24 @@ export interface CompositionProfile {
 export interface ExtensionSource {
   readonly descriptor: ModuleDescriptor;
   readonly exportName: string;
+  /** Como montar o módulo; ausente = import simples do `exportName`. */
+  readonly composition?: ExtensionComposition;
+}
+
+/**
+ * Metadata de montagem declarada no descriptor do pacote (D7). Nunca é código
+ * executável: o gerador só lê nomes e emite imports estáticos.
+ */
+export interface ExtensionComposition {
+  /** Configuração entregue pelo host por token; gera `registerAsync`. */
+  readonly hostOptions?: {
+    /** Nome do token de host (`Symbol.for('foundation.api.v1.host.<token>')`). */
+    readonly token: string;
+    /** Tipo exportado pelo pacote para as opções. */
+    readonly type: string;
+  };
+  /** Export do pacote que entrega cada capacidade fornecida, por id de capacidade. */
+  readonly capabilityTokens?: Readonly<Record<string, string>>;
 }
 
 const TOP_LEVEL_FIELDS = [
@@ -349,7 +367,10 @@ export function buildCompositionInput(
   for (const extension of profile.extensions) {
     const source = sources.get(extension.id);
     if (source === undefined)
-      fail('PROFILE_UNKNOWN_EXTENSION', `Unknown extension ${extension.id}`);
+      fail(
+        'PROFILE_UNKNOWN_EXTENSION',
+        `Unknown extension ${extension.id}: install ${extension.packageName}@${extension.version} before composing`,
+      );
     const origin = source.descriptor.origin;
     if (
       origin.kind !== 'npm' ||

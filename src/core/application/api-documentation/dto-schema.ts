@@ -1,7 +1,7 @@
 /**
  * Contrato neutro de documentação de DTOs. Application pura: não importa Nest,
  * decorators nem a biblioteca de Swagger. Módulos de negócio descrevem seus DTOs
- * aqui; o adapter nativo `native/swagger-adapter` traduz o registro para OpenAPI
+ * aqui; o módulo oficial `@devtrack/swagger-adapter` (`ext/swagger-adapter`) traduz o registro para OpenAPI
  * somente quando a capacidade é selecionada. Sem o adapter, o registro existe e
  * nada é carregado de biblioteca externa.
  */
