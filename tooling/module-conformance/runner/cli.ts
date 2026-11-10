@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { RequestError, readRequestFile } from '../profiles/schema';
+import { API_CLI_PACKAGE, API_CLI_ROOT_ENV, resolveApiCli } from './api-cli';
 import { runConformance } from './run';
 
 function arg(name: string): string | undefined {
@@ -9,8 +10,6 @@ function arg(name: string): string | undefined {
   return index >= 0 ? process.argv[index + 1] : undefined;
 }
 
-/** Bin do api-cli irmão (`../api-cli`, já compilado), o mesmo instalador canônico usado pelos hosts. */
-const API_CLI_BIN = path.resolve(__dirname, '..', '..', '..', '..', 'api-cli', 'dist', 'src', 'bin.js');
 
 /**
  * Instalação canônica (D8): roda `api-cli install <nome>@<versão> --registry` na Foundation
@@ -19,9 +18,12 @@ const API_CLI_BIN = path.resolve(__dirname, '..', '..', '..', '..', 'api-cli', '
 function canonicalInstaller(registry: string) {
   return (foundationRoot: string, packageDir: string): void => {
     const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as { name: string; version: string };
-    if (!fs.existsSync(API_CLI_BIN)) throw new Error(`api-cli não compilado: ${API_CLI_BIN}`);
+    // Mesmo instalador canônico dos hosts: pasta irmã no monorepo ou `@devtrack/api-cli` instalado.
+    const apiCli = resolveApiCli();
+    if (apiCli === null) throw new Error(`api-cli não encontrado: instale ${API_CLI_PACKAGE} ou defina ${API_CLI_ROOT_ENV}`);
+    if (!fs.existsSync(apiCli.bin)) throw new Error(`api-cli não compilado: ${apiCli.bin}`);
     const result = spawnSync(process.execPath, [
-      API_CLI_BIN, '--foundation', foundationRoot, 'install', `${manifest.name}@${manifest.version}`, '--registry', registry,
+      apiCli.bin, '--foundation', foundationRoot, 'install', `${manifest.name}@${manifest.version}`, '--registry', registry,
     ], { encoding: 'utf8', timeout: 300_000 });
     if (result.status !== 0)
       throw new Error(`api-cli install ${manifest.name}@${manifest.version} falhou: ${`${result.stdout}\n${result.stderr}`.trim().split('\n').slice(-5).join(' | ')}`);

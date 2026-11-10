@@ -9,6 +9,7 @@ import { compileFixture } from '../checks/compatibility';
 import { parseRequest, RequestError, STANDARD_PROFILE_DIGEST } from '../profiles/schema';
 import { sha256 } from '../reports/schema';
 import { childEnv, OwnedTemp, runBounded } from '../runner/executor';
+import { API_CLI_ROOT_ENV, resolveApiCli } from '../runner/api-cli';
 import { runConformance } from '../runner/run';
 import type { ParsedRequest } from '../profiles/schema';
 
@@ -544,4 +545,47 @@ test('módulo técnico: peer da Foundation fora da faixa do host reprova a insta
   assert.equal(install?.reason, 'installer-rejected');
   assert.match(install?.evidence?.join('\n') ?? '', /@devtrack\/foundation-api@\^0\.2\.0.*instalado 0\.1\.0/);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('api-cli: resolve checkout irmão, variável, explícito e pacote instalado, nesta ordem', () => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'kit-api-cli-'));
+  try {
+    const write = (file: string, content = ''): void => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, content);
+    };
+    // Monorepo: foundation-api com api-cli irmão (fonte) e também um pacote instalado.
+    const mono = path.join(base, 'mono');
+    const monoFoundation = path.join(mono, 'foundation-api');
+    write(path.join(monoFoundation, 'package.json'), '{"name":"@devtrack/foundation-api","version":"0.1.0"}');
+    write(path.join(mono, 'api-cli', 'src', 'validation.ts'));
+    const installedInMono = path.join(monoFoundation, 'node_modules', '@devtrack', 'api-cli');
+    write(path.join(installedInMono, 'package.json'), '{"name":"@devtrack/api-cli","version":"0.1.0"}');
+    write(path.join(installedInMono, 'dist', 'src', 'validation.js'));
+    const sibling = resolveApiCli(undefined, {}, monoFoundation);
+    assert.equal(sibling?.layout, 'source');
+    assert.equal(sibling?.root, path.join(mono, 'api-cli'));
+    assert.equal(sibling?.bin, path.join(mono, 'api-cli', 'dist', 'src', 'bin.js'));
+
+    // Repositório isolado: só o pacote publicado em node_modules.
+    const isolated = path.join(base, 'devtrack-foundation-core');
+    write(path.join(isolated, 'package.json'), '{"name":"@devtrack/foundation-api","version":"0.1.0"}');
+    assert.equal(resolveApiCli(undefined, {}, isolated), null);
+    const installed = path.join(isolated, 'node_modules', '@devtrack', 'api-cli');
+    write(path.join(installed, 'package.json'), '{"name":"@devtrack/api-cli","version":"0.1.0"}');
+    write(path.join(installed, 'dist', 'src', 'validation.js'));
+    const fromPackage = resolveApiCli(undefined, {}, isolated);
+    assert.equal(fromPackage?.layout, 'package');
+    assert.equal(fs.realpathSync(fromPackage!.root), fs.realpathSync(installed));
+    assert.equal(fromPackage?.validation, path.join(fromPackage!.root, 'dist', 'src', 'validation.js'));
+    assert.equal(fromPackage?.extensions, path.join(fromPackage!.root, 'dist', 'src', 'extensions.js'));
+
+    // Variável vence a pasta irmã; explícito vence a variável; apontar para lugar errado não cai no próximo.
+    assert.equal(resolveApiCli(undefined, { [API_CLI_ROOT_ENV]: installedInMono }, monoFoundation)?.layout, 'package');
+    assert.equal(resolveApiCli(path.join(mono, 'api-cli'), { [API_CLI_ROOT_ENV]: installedInMono }, monoFoundation)?.layout, 'source');
+    assert.equal(resolveApiCli(undefined, { [API_CLI_ROOT_ENV]: path.join(base, 'nada') }, monoFoundation), null);
+    assert.equal(resolveApiCli(path.join(base, 'nada'), {}, monoFoundation), null);
+  } finally {
+    fs.rmSync(base, { recursive: true, force: true });
+  }
 });

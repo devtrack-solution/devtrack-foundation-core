@@ -7,6 +7,8 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { FOUNDATION_API_MAJOR } from '../../../src/core/application/modules/module-descriptor';
 import type { ModuleDescriptor } from '../../../src/core/application/modules/module-descriptor';
+import { API_CLI_PACKAGE, API_CLI_ROOT_ENV, resolveApiCli } from './api-cli';
+import type { ApiCliLocation } from './api-cli';
 import {
   checkoutDependentSpecifiers,
   copyPackage,
@@ -69,16 +71,17 @@ function fileDigest(file: string): string | null {
   return `sha256:${sha256(fs.readFileSync(file))}`;
 }
 
-function prerequisites(apiCliRoot: string): ConformanceReport['prerequisites'] {
+function prerequisites(apiCli: ApiCliLocation | null): ConformanceReport['prerequisites'] {
   const here = path.resolve(__dirname, '..', '..', '..');
   const entries: Array<[string, string]> = [
     ['resolveComposition', path.join(here, 'src/core/application/modules/resolve-composition.ts')],
     ['renderComposition', path.join(here, 'src/core/infrastructure/composition/composition-generator.ts')],
     ['checkBoundaries', path.join(here, 'scripts/check-boundaries.mjs')],
     ['buildArtifact', path.join(here, 'scripts/build-artifact.ts')],
-    ['installExtension', path.join(apiCliRoot, 'src/extensions.ts')],
   ];
-  return entries.map(([id, file]) => ({ id, present: fs.existsSync(file), digest: fileDigest(file) }));
+  const records = entries.map(([id, file]) => ({ id, present: fs.existsSync(file), digest: fileDigest(file) }));
+  const installer = apiCli === null ? null : apiCli.extensions;
+  return [...records, { id: 'installExtension', present: installer !== null && fs.existsSync(installer), digest: installer === null ? null : fileDigest(installer) }];
 }
 
 function kitDigest(): string {
@@ -92,8 +95,9 @@ function check(id: string, status: CheckRecord['status'], reason?: string, evide
   return { id, status, ...(reason === undefined ? {} : { reason }), ...(evidence === undefined ? {} : { evidence }) };
 }
 
-function loadInstaller(apiCliRoot: string): { validateManifest: Function; parseDescriptor: Function } | null {
-  const file = path.join(apiCliRoot, 'src', 'validation.ts');
+function loadInstaller(apiCli: ApiCliLocation | null): { validateManifest: Function; parseDescriptor: Function } | null {
+  if (apiCli === null) return null;
+  const file = apiCli.validation;
   if (!fs.existsSync(file)) return null;
   try {
     const loaded = load(file) as { validateManifest?: Function; parseDescriptor?: Function };
@@ -134,7 +138,7 @@ export async function runConformance(options: RunOptions): Promise<{ readonly re
   ];
   let exception: ConformanceReport['exception'] = null;
   let selectionSummary: ConformanceReport['selection'] = { modules: [], bindings: [] };
-  const apiCliRoot = options.apiCliRoot ?? path.resolve(__dirname, '..', '..', '..', '..', 'api-cli');
+  const apiCli = resolveApiCli(options.apiCliRoot);
 
   const finish = (result: GlobalResult): { readonly report: ConformanceReport; readonly exitCode: 0 | 1 | 2 } => {
     const identityInput = {
@@ -173,7 +177,7 @@ export async function runConformance(options: RunOptions): Promise<{ readonly re
       profile: identityInput.profile,
       selection: selectionSummary,
       runtime: { node: process.version, platform: os.platform(), arch: os.arch() },
-      prerequisites: prerequisites(apiCliRoot),
+      prerequisites: prerequisites(apiCli),
       checks,
       limitations,
       exception,
@@ -348,10 +352,12 @@ export async function runConformance(options: RunOptions): Promise<{ readonly re
       }
     }
 
-    const installer = loadInstaller(apiCliRoot);
+    const installer = loadInstaller(apiCli);
     if (installer === null) {
       checks.push(check('install', 'not-run', 'installer-interface-missing'));
-      limitations.push('installExtension/validateManifest indisponível. Não houve simulação de instalação.');
+      limitations.push(apiCli === null
+        ? `api-cli não encontrado (pasta irmã, ${API_CLI_PACKAGE} instalado ou ${API_CLI_ROOT_ENV}). Não houve simulação de instalação.`
+        : `installExtension/validateManifest indisponível em ${apiCli.validation}. Não houve simulação de instalação.`);
     } else {
       try {
         // Peers contra o host real: nome e versão do package.json dele e pacotes realmente instalados (D8).

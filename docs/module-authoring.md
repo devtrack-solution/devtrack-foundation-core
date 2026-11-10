@@ -11,8 +11,12 @@ em compatibilidade universal.
   symlink que escape do pacote e não completa arquivo ausente a partir de outro diretório.
 - Descriptor no formato já usado pela Foundation (`id`, `foundationApiMajor`, `origin`,
   `features`, `provides`, `requires`). Não há manifesto novo.
-- `api-cli` presente e compilado no workspace (`../api-cli/dist`) se o check `install` for
-  obrigatório. Com `registry` e `foundationRoot` na requisição, o CLI do kit instala o módulo
+- `api-cli` disponível se o check `install` for obrigatório. O kit procura, nesta ordem, o
+  caminho em `DEVTRACK_API_CLI_ROOT`, a pasta irmã compilada (`../api-cli`, no monorepo) e o
+  pacote `@devtrack/api-cli` instalado no `node_modules` da Foundation. Num repositório isolado
+  ou no CI, instale `@devtrack/api-cli` do registry (por exemplo em um prefixo separado, com
+  `npm install --prefix <dir> @devtrack/api-cli@<versão>`) e aponte a variável para
+  `<dir>/node_modules/@devtrack/api-cli`. Com `registry` e `foundationRoot` na requisição, o CLI do kit instala o módulo
   pelo bin do `api-cli` (`install <nome>@<versão> --registry`). Sem registry allowlisted, esse
   check fica `not-run` e o perfil padrão não aprova.
 - O host é o pacote `@devtrack/foundation-api` instalado (ou o diretório dele). O kit monta um
@@ -170,7 +174,7 @@ procurada não apareceu. Isso não é compatibilidade universal.
 | saída 1, `MISSING_PROVIDER` / `AMBIGUOUS_PROVIDER` | Seleção sem provider único | Corrigir companions ou bindings; o kit não escolhe provider |
 | saída 2, `timeout` | Fixture não encerrou no prazo | Corrigir o boot ou aumentar `limits.timeoutMs` |
 | saída 2, `registry-not-configured` | Perfil padrão sem registry | Informar registry allowlisted ou aceitar que o padrão não aprovou |
-| saída 2, `installer-interface-missing` | `api-cli` não carregou | `npm ci` em `api-cli`; não simular instalação |
+| saída 2, `installer-interface-missing` | `api-cli` não encontrado ou não carregou | no monorepo, `npm ci` e `npm run build` em `api-cli`; fora dele, instalar `@devtrack/api-cli` (no projeto ou num prefixo separado) e apontar `DEVTRACK_API_CLI_ROOT` para a pasta do pacote; não simular instalação |
 | saída 2, `insufficient-material` | Sem `src/domain` ou `src/application` e sem `layout: "module"` | Declarar o layout correto; o gate não aprova o que não analisa |
 | saída 2, `fixture-not-declared` | `conformance.consumer` ou `implementer` ausente | Publicar as fixtures em `conformance/` e declará-las |
 | saída 1, `foundation-internal-import` | Import da Foundation fora de `/contracts` e `/nest` | Usar só as fachadas públicas |
