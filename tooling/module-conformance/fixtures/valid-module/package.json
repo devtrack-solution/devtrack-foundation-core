@@ -1,0 +1,14 @@
+{
+  "name": "@fixture/conformance-valid",
+  "version": "1.0.0",
+  "exports": {
+    ".": {
+      "types": "./src/contract.d.ts",
+      "default": "./src/contract.js"
+    },
+    "./descriptor": "./descriptor.json"
+  },
+  "conformance": {
+    "boot": ["node", "boot.js"]
+  }
+}

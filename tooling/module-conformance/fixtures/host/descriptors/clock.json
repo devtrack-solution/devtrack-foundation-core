@@ -1,0 +1,9 @@
+{
+  "id": "native/clock",
+  "foundationApiMajor": 1,
+  "exportName": "ClockModule",
+  "features": [],
+  "provides": [{ "id": "fixture-clock", "major": 1 }],
+  "requires": [],
+  "origin": { "kind": "native" }
+}

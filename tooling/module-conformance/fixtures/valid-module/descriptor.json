@@ -1,0 +1,14 @@
+{
+  "id": "ext/fixture-valid",
+  "foundationApiMajor": 1,
+  "exportName": "FixtureModule",
+  "features": ["extra"],
+  "provides": [{ "id": "fixture-reading", "major": 1 }],
+  "requires": [{ "id": "fixture-clock", "major": 1, "whenFeature": "extra" }],
+  "origin": {
+    "kind": "npm",
+    "packageName": "@fixture/conformance-valid",
+    "version": "1.0.0",
+    "integrity": "sha512-AAAAAAAAAAAAAAAAAAAAAA=="
+  }
+}
