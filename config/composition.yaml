@@ -1,0 +1,11 @@
+# Perfil de composição da Foundation API. Versionado; NÃO contém segredos.
+# Chaves, senhas e tokens vêm do host por configuração ou cofre, nunca daqui.
+#
+# natives: capacidades nativas selecionadas pelo id (ver native-catalog.ts).
+# extensions: pacotes npm com id, packageName, version exata, integrity e features.
+# bindings: opcional; escolhe o provider quando há mais de um compatível.
+#
+# Perfil padrão: host mínimo, sem extensões (sem Contacts) e sem JWT.
+foundationApiMajor: 1
+natives: []
+extensions: []
