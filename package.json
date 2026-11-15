@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "DevTrack Foundation: core modular NestJS com contratos públicos, composição por perfil e módulos nativos.",
   "author": "",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "bin": {
     "devtrack-check-publishable": "scripts/check-publishable.mjs"
   },
@@ -30,7 +30,8 @@
     "build:artifact": "ts-node --transpile-only scripts/build-artifact.ts",
     "test:artifact": "node --require ts-node/register/transpile-only --test scripts/build-artifact.test.ts",
     "conformance": "node --require ts-node/register/transpile-only tooling/module-conformance/runner/cli.ts",
-    "test:conformance": "node --require ts-node/register/transpile-only --test tooling/module-conformance/test/kit.test.ts",
+    "test:conformance": "node --require ts-node/register/transpile-only --test tooling/module-conformance/test/kit.test.ts tooling/module-conformance/test/qualify-published.test.ts",
+    "conformance:published": "node --require ts-node/register/transpile-only tooling/module-conformance/runner/qualify-published.ts",
     "check:publishable": "node scripts/check-publishable.mjs",
     "test:publishable": "node --test scripts/check-publishable.test.mjs",
     "prepack": "node scripts/check-publishable.mjs"
