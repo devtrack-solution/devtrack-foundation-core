@@ -25,7 +25,7 @@ const VALID = {
   exports: { '.': './dist/index.js', './descriptor': './dist/sample.descriptor.json' },
 };
 
-describe('qualificação contra a Foundation publicada (pipeline dos módulos)', () => {
+describe('qualificação contra a Foundation publicada (CI dos módulos)', () => {
   it('opções: registry vem do argumento ou de DEVTRACK_REGISTRY, sem barra final; faltando algo, recusa', () => {
     const options = parseOptions(['--module', 'm', '--out', 'o'], { DEVTRACK_REGISTRY: 'https://r.example/npm/' });
     assert.equal(options.registry, 'https://r.example/npm');

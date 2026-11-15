@@ -1,0 +1,241 @@
+# CI do devtrack-foundation-core (@devtrack-solution/foundation-api), change
+# split-foundation-repositories, D5.
+#
+# Gates: os mesmos do CI do monorepo para a Foundation, um job por gate. O job `ci-required`
+# agrega todos e falha se algum resultado for diferente de `success` (skipped e cancelled contam
+# como falha). Marque `ci-required` como check obrigatório da `main`.
+# Publicação: só em tag v<versão> igual ao package.json, depois de `ci-required` verde.
+#
+# Configuração do repositório (Settings → Secrets and variables → Actions):
+#   vars.DEVTRACK_REGISTRY  opcional; URL do registry do escopo (D6). Padrão: npmjs.
+#   secrets.NPM_TOKEN       token de publicação no npmjs; só o job de publicação recebe.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+permissions:
+  contents: read
+
+env:
+  DEVTRACK_REGISTRY: ${{ vars.DEVTRACK_REGISTRY || 'https://registry.npmjs.org' }}
+  # Instalador canônico usado pelo kit de conformidade (D9).
+  API_CLI_VERSION: '0.1.0'
+
+jobs:
+  imports:
+    name: imports
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { registry: 'false' }
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Verificar fronteiras de imports
+        run: npm run check:boundaries
+      - name: Testar verificador de fronteiras
+        run: npm run test:boundaries
+
+  lint-typecheck:
+    name: lint-typecheck
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { registry: 'false' }
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Lint
+        run: npm run lint:check
+      - name: Typecheck
+        run: npm run typecheck
+
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { registry: 'false' }
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Testes unitários
+        run: npm test -- --runInBand --ci
+
+  contracts:
+    name: contracts
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { registry: 'false' }
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Testes de contrato
+        run: npm run test:contracts
+
+  composition:
+    name: composition
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { registry: 'false' }
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Verificar composição gerada
+        run: npm run compose -- --check
+      - name: Testes e2e de composição
+        run: npm run test:e2e -- --runInBand --ci
+
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { registry: 'false' }
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Testes de integração de persistência (Testcontainers)
+        run: |
+          set -euo pipefail
+          if ls test/persistence*.e2e-spec.ts >/dev/null 2>&1; then
+            npx jest --config ./test/jest-e2e.json --runInBand --ci --testPathPatterns persistence
+          else
+            echo "sem testes de integração: nenhum test/persistence*.e2e-spec.ts encontrado"
+          fi
+
+  artifact:
+    name: artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { registry: 'false' }
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Testes do artefato
+        run: npm run test:artifact
+      - name: Build seletivo do artefato e evidência
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/artifact"
+          evidence="$RUNNER_TEMP/evidence"
+          rm -rf "$out"
+          npx ts-node --transpile-only scripts/build-artifact.ts --profile config/composition.yaml --out "$out"
+          mkdir -p "$evidence"
+          cp "$out/artifact-inventory.json" "$out/package-lock.json" "$evidence/"
+          {
+            echo "commit_sha=$GITHUB_SHA"
+            echo "node_version=$(node -v)"
+            echo "npm_version=$(npm -v)"
+            echo "host_lock_sha256=$(sha256sum package-lock.json | cut -d' ' -f1)"
+            echo "artifact_lock_sha256=$(sha256sum "$out/package-lock.json" | cut -d' ' -f1)"
+          } > "$evidence/ci-evidence.txt"
+          cat "$evidence/ci-evidence.txt"
+      - name: Publicar evidência do artefato
+        uses: actions/upload-artifact@v7
+        with:
+          name: foundation-artifact-${{ github.sha }}
+          path: ${{ runner.temp }}/evidence/
+          if-no-files-found: error
+
+  publishable:
+    name: publishable
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { registry: 'false' }
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Testes do verificador de publicação
+        run: npm run test:publishable
+      - name: Pacote publicável (sem file, link ou caminho de checkout)
+        run: npm run build && npm run check:publishable
+
+  module-conformance:
+    name: module-conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Instalar @devtrack-solution/api-cli num prefixo separado
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/api-cli"
+          mkdir -p "$prefix"
+          echo '{"name":"ci-api-cli","version":"1.0.0","private":true}' > "$prefix/package.json"
+          npm install --prefix "$prefix" "@devtrack-solution/api-cli@$API_CLI_VERSION" --no-audit --no-fund
+          echo "DEVTRACK_API_CLI_ROOT=$prefix/node_modules/@devtrack-solution/api-cli" >> "$GITHUB_ENV"
+      - name: Kit de conformidade (exits 0/1/2, fixture inválida e qualificação publicada)
+        run: npm run test:conformance
+
+  ci-required:
+    name: ci-required
+    if: always()
+    needs: [imports, lint-typecheck, unit, contracts, composition, integration, artifact, publishable, module-conformance]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Todos os gates verdes
+        env:
+          RESULTS: ${{ join(needs.*.result, ' ') }}
+        run: |
+          echo "resultados: $RESULTS"
+          for r in $RESULTS; do [ "$r" = success ] || { echo "::error::gate com resultado $r"; exit 1; }; done
+
+  publish:
+    name: npm publish
+    needs: [ci-required]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup
+        with: { auth: 'true' }
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Tag igual à versão
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME não corresponde ao package.json (v$version)"
+            exit 1
+          fi
+      - name: Instalar dependências (lock obrigatório)
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: Publicar @devtrack-solution/foundation-api
+        env:
+          # Provenance exige repositório público; em repositório privado publica sem ela.
+          PROVENANCE: ${{ github.event.repository.private && '--no-provenance' || '--provenance' }}
+        run: npm publish "$PROVENANCE"

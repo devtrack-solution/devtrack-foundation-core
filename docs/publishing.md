@@ -25,7 +25,7 @@ Testes: `npm run test:publishable`, que cobre o pacote válido, o nome sem escop
 
 ## Registry
 
-O registry não fica no `package.json`. Cada ambiente o define no `.npmrc` (local ou do pipeline):
+O registry não fica no `package.json`. Cada ambiente o define no `.npmrc` (local ou do CI):
 
 ```ini
 @devtrack-solution:registry=${DEVTRACK_REGISTRY}
@@ -50,22 +50,23 @@ O `.npmrc` com `${DEVTRACK_REGISTRY}` não é versionado. O npm falha quando a v
 - Ordem: primeiro a Foundation, depois os módulos. A versão da Foundation exigida pelo peer precisa existir no mesmo registry antes da publicação de um módulo.
 - Versão publicada não é removida. Um defeito se corrige com uma versão nova e `npm deprecate` na versão anterior.
 
-## Pipelines (Azure Pipelines, D5)
+## CI (GitHub Actions, D5)
 
-Cada repositório tem um `azure-pipelines.yml` e o template `.azure-pipelines/setup.yml`, que fixa o Node e grava o npmrc do escopo `@devtrack-solution` no diretório temporário do agente (`NPM_CONFIG_USERCONFIG`).
+Cada repositório tem o workflow `.github/workflows/ci.yml` e a action local `.github/actions/setup`, que fixa o Node, liga o cache do npm e grava o npmrc do escopo `@devtrack-solution` em `$RUNNER_TEMP` (`NPM_CONFIG_USERCONFIG`). Os repositórios ficam na organização GitHub `devtrack-solution` (decisão de 2026-11-15, que substituiu o Azure Pipelines).
 
-Variáveis definidas na UI do pipeline, fora do repositório:
+Configuração do repositório (Settings → Secrets and variables → Actions):
 
-| Variável | Uso |
-| --- | --- |
-| `DEVTRACK_REGISTRY` | URL do registry do escopo `@devtrack-solution`. É a origem da Foundation, do `api-cli` e o destino da publicação. |
-| `DEVTRACK_REGISTRY_TOKEN` | Secreta. Token de publicação. Só os jobs de publicação o recebem (`auth: true` no template); os gates leem o registry sem credencial, porque executam código de dependências e do módulo qualificado. Sem ela, o job de publicação falha no passo do token. |
+| Nome | Tipo | Uso |
+| --- | --- | --- |
+| `DEVTRACK_REGISTRY` | variável, opcional | URL do registry do escopo `@devtrack-solution`. Padrão: `https://registry.npmjs.org`. É a origem da Foundation e do `api-cli` e o destino da publicação. |
+| `NPM_TOKEN` | secret | Token de publicação. Só o job de publicação o recebe (`auth: 'true'` na action); os gates leem o registry sem credencial, porque executam código de dependências e do módulo qualificado. Sem ele, a publicação falha no passo do token. |
+| `FOUNDATION_CORE_TOKEN` | secret, só nos módulos | Necessário apenas enquanto o `devtrack-foundation-core` for privado: token com leitura de conteúdo daquele repositório, para o checkout da conformidade. Com o repositório público, o `github.token` basta. |
 
-Disparo: push na `main` e tags `v*`. O Azure Repos ignora a chave `pr:`, então a validação de PR é uma política de branch da `main` (Build validation) apontando para o pipeline.
+Disparo: push na `main`, tags `v*` e pull requests para a `main`. O job `ci-required` agrega os gates e falha se algum não terminar em `success`; marque-o como check obrigatório na proteção da `main`.
 
 - **Foundation** (`devtrack-foundation-core`): um job por gate do CI do monorepo (imports, lint-typecheck, unit, contracts, composition, integration, artifact, publishable, module-conformance). O job do kit instala `@devtrack-solution/api-cli` (`API_CLI_VERSION`) num prefixo separado.
-- **Módulos** (`devtrack-jwt-auth`, `devtrack-swagger-adapter`): job de qualidade (typecheck, lint, testes, fronteiras, build, `check:publishable`) e job de conformidade contra a Foundation publicada. O segundo faz checkout do `devtrack-foundation-core` na tag do peer (`resources.repositories`, `ref: refs/tags/v0.1.0`) numa pasta que não pode se chamar `foundation-api`, porque o `link-foundation.mjs` ligaria a pasta irmã. Depois roda `npm run conformance:published` a partir dela. O relatório sai como artefato do pipeline mesmo quando o job falha.
-- **Publicação**: stage próprio, só em tag `v*` e depois de todos os gates verdes. A tag precisa ser igual a `v` mais a versão do `package.json`. Nos módulos, o `prepublishOnly` ainda recusa publicar sem o peer publicado.
+- **Módulos** (`devtrack-jwt-auth`, `devtrack-swagger-adapter`): job de qualidade (typecheck, lint, testes, fronteiras, build, `check:publishable`) e job de conformidade contra a Foundation publicada. O segundo faz checkout do `devtrack-foundation-core` na tag do peer (`FOUNDATION_REF`, hoje `v0.1.0`) numa pasta que não pode se chamar `foundation-api`, porque o `link-foundation.mjs` ligaria a pasta irmã. Depois roda `npm run conformance:published` a partir dela. O relatório sai como artefato do workflow mesmo quando o job falha.
+- **Publicação**: job `publish`, só em tag `v*` e depois de `ci-required` verde. A tag precisa ser igual a `v` mais a versão do `package.json`. Em repositório público, publica com `--provenance` (atestado de origem do npm, que exige `id-token: write`); em repositório privado, sem ela. Nos módulos, o `prepublishOnly` ainda recusa publicar sem o peer publicado.
 
 `conformance:published` (`tooling/module-conformance/runner/qualify-published.ts`):
 
@@ -82,12 +83,12 @@ O lock de cada módulo guarda a `integrity` do tarball da Foundation. Quando a F
 
 Pré-requisitos, fora do repositório:
 
-- Organização `devtrack` no npmjs, com quem publica como owner ou membro com permissão de publicação nos pacotes do escopo.
-- Token granular do npmjs com leitura e escrita restritas ao escopo `@devtrack-solution` e com a opção de ignorar 2FA ativada; sem ela, o `npm publish` do pipeline pede OTP. O npmjs limita a validade de tokens com escrita: anote o vencimento e renove `DEVTRACK_REGISTRY_TOKEN` antes dele.
+- Organização `devtrack-solution` no npmjs, com quem publica como owner ou membro com permissão de publicação nos pacotes do escopo.
+- Token granular do npmjs com leitura e escrita restritas ao escopo `@devtrack-solution` e com a opção de ignorar 2FA ativada; sem ela, o `npm publish` do workflow pede OTP. Ele vai no secret `NPM_TOKEN` de cada repositório. O npmjs limita a validade de tokens com escrita: anote o vencimento e renove o secret antes dele. Depois da primeira publicação, dá para trocar o token por trusted publishing (OIDC do GitHub Actions), configurado por pacote no npmjs.
 
 Ordem, porque cada etapa precisa da anterior no registry:
 
-1. `@devtrack-solution/api-cli`, deste monorepo e sem pipeline, porque o job do kit da Foundation o instala.
+1. `@devtrack-solution/api-cli`, deste monorepo e sem workflow próprio, porque o job do kit da Foundation o instala.
 2. Tag `v0.1.0` no `devtrack-foundation-core`, que publica a Foundation e cria a ref usada pelos módulos.
 3. Em cada módulo, regenerar a entrada da Foundation no lock contra o npmjs (parágrafo do `EINTEGRITY` acima), commit, e a tag `v0.1.0`.
 

@@ -35,11 +35,11 @@ A partir de `foundation-api/`:
 npm run conformance -- --request caminho/request.json --out caminho/relatorio
 ```
 
-Para qualificar um módulo contra a Foundation já publicada, como no pipeline dos módulos, use
+Para qualificar um módulo contra a Foundation já publicada, como no CI dos módulos, use
 `npm run -s conformance:published -- --module <checkout do módulo compilado> --registry <url> --out <dir>`
 a partir do checkout da Foundation na tag da versão publicada. O script monta o host, o registry
 efêmero, o inventário e a requisição, e sai com o código do kit (ver `docs/publishing.md`,
-seção "Pipelines"). Precisa de Docker.
+seção "CI"). Precisa de Docker.
 
 `--profile` é opcional e só aceita o perfil padrão v1 intacto
 (`tooling/module-conformance/profiles/standard-v1.json`). Arquivo adulterado faz a entrada

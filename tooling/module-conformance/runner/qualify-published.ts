@@ -1,6 +1,6 @@
 /**
  * Qualificação de um módulo contra a Foundation publicada (change split-foundation-repositories,
- * D5). É o passo de conformidade dos pipelines dos módulos e roda a partir do checkout da
+ * D5). É o passo de conformidade do CI dos módulos e roda a partir do checkout da
  * Foundation na tag da versão publicada, que fornece o kit e o host de instalação.
  *
  * Sequência:
@@ -28,7 +28,7 @@ import { API_CLI_PACKAGE, API_CLI_ROOT_ENV, resolveApiCli } from './api-cli';
 const FOUNDATION_ROOT = path.resolve(__dirname, '..', '..', '..');
 const FOUNDATION_PACKAGE = '@devtrack-solution/foundation-api';
 const VERDACCIO_IMAGE = 'verdaccio/verdaccio:6';
-/** Prazo dos comandos docker: um daemon travado não pode prender o job até o timeout do pipeline. */
+/** Prazo dos comandos docker: um daemon travado não pode prender o job até o timeout do CI. */
 const DOCKER_TIMEOUT_MS = 120_000;
 
 export class QualifyError extends Error {}
