@@ -18,7 +18,7 @@ function arg(name: string): string | undefined {
 function canonicalInstaller(registry: string) {
   return (foundationRoot: string, packageDir: string): void => {
     const manifest = JSON.parse(fs.readFileSync(path.join(packageDir, 'package.json'), 'utf8')) as { name: string; version: string };
-    // Mesmo instalador canônico dos hosts: pasta irmã no monorepo ou `@devtrack/api-cli` instalado.
+    // Mesmo instalador canônico dos hosts: pasta irmã no monorepo ou `@devtrack-solution/api-cli` instalado.
     const apiCli = resolveApiCli();
     if (apiCli === null) throw new Error(`api-cli não encontrado: instale ${API_CLI_PACKAGE} ou defina ${API_CLI_ROOT_ENV}`);
     if (!fs.existsSync(apiCli.bin)) throw new Error(`api-cli não compilado: ${apiCli.bin}`);

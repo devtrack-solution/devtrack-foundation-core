@@ -9,9 +9,9 @@ import { findPublishViolations, findUnpublishedPeers } from './check-publishable
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'check-publishable.mjs');
 const VALID = {
-  name: '@devtrack/jwt-auth',
+  name: '@devtrack-solution/jwt-auth',
   version: '0.1.0',
-  peerDependencies: { '@devtrack/foundation-api': '^0.1.0' },
+  peerDependencies: { '@devtrack-solution/foundation-api': '^0.1.0' },
   dependencies: { jose: '5.10.0' },
 };
 
@@ -29,13 +29,13 @@ test('aceita pacote com escopo, semver exata e dependências portáveis', () => 
   assert.deepEqual(findPublishViolations(VALID), []);
   const result = runOn(VALID);
   assert.equal(result.status, 0);
-  assert.match(result.stdout, /@devtrack\/jwt-auth@0\.1\.0 publicável/);
+  assert.match(result.stdout, /@devtrack-solution\/jwt-auth@0\.1\.0 publicável/);
 });
 
 test('recusa nome sem escopo e identifica o nome divergente', () => {
   const result = runOn({ ...VALID, name: 'foundation-api' });
   assert.equal(result.status, 1);
-  assert.match(result.stderr, /nome "foundation-api" fora do escopo @devtrack/);
+  assert.match(result.stderr, /nome "foundation-api" fora do escopo @devtrack-solution/);
 });
 
 test('recusa dependência file:, link e caminho relativo antes de empacotar', () => {
@@ -44,7 +44,7 @@ test('recusa dependência file:, link e caminho relativo antes de empacotar', ()
     assert.equal(violations.length, 1, spec);
     assert.match(violations[0], /não portável/);
   }
-  assert.equal(runOn({ ...VALID, peerDependencies: { '@devtrack/foundation-api': 'file:../foundation-api' } }).status, 1);
+  assert.equal(runOn({ ...VALID, peerDependencies: { '@devtrack-solution/foundation-api': 'file:../foundation-api' } }).status, 1);
 });
 
 test('recusa pacote private e versão não exata', () => {
@@ -60,7 +60,7 @@ test('roda quando invocado por symlink (node_modules e shim de .bin) e reprova d
     writeFileSync(join(dir, 'package.json'), JSON.stringify({ ...VALID, name: 'sem-escopo' }));
     const result = spawnSync(process.execPath, [link, dir], { encoding: 'utf8' });
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /fora do escopo @devtrack/);
+    assert.match(result.stderr, /fora do escopo @devtrack-solution/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -69,7 +69,7 @@ test('roda quando invocado por symlink (node_modules e shim de .bin) e reprova d
 test('o package.json da própria Foundation é publicável', () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..');
   const output = execFileSync(process.execPath, [SCRIPT, root], { encoding: 'utf8' });
-  assert.match(output, /@devtrack\/foundation-api@\d+\.\d+\.\d+ publicável/);
+  assert.match(output, /@devtrack-solution\/foundation-api@\d+\.\d+\.\d+ publicável/);
 });
 
 /** npm falso: responde `npm view` com as versões publicadas informadas, como o registry faria. */
@@ -87,17 +87,17 @@ process.stdout.write(JSON.stringify(versions));
   return { dir, npm: script };
 }
 
-test('publicação ordenada: peer @devtrack sem versão publicada é recusado; com versão publicada passa', () => {
+test('publicação ordenada: peer @devtrack-solution sem versão publicada é recusado; com versão publicada passa', () => {
   const empty = fakeNpm({});
   assert.deepEqual(findUnpublishedPeers(VALID, { npm: empty.npm }), [
-    'peer "@devtrack/foundation-api@^0.1.0" não tem versão publicada no registry',
+    'peer "@devtrack-solution/foundation-api@^0.1.0" não tem versão publicada no registry',
   ]);
-  const published = fakeNpm({ '@devtrack/foundation-api': ['0.1.0'] });
+  const published = fakeNpm({ '@devtrack-solution/foundation-api': ['0.1.0'] });
   assert.deepEqual(findUnpublishedPeers(VALID, { npm: published.npm, registry: 'http://registry.test' }), []);
   for (const fake of [empty, published]) rmSync(fake.dir, { recursive: true, force: true });
 });
 
-test('publicação ordenada ignora peers fora do escopo @devtrack', () => {
+test('publicação ordenada ignora peers fora do escopo @devtrack-solution', () => {
   const empty = fakeNpm({});
   assert.deepEqual(findUnpublishedPeers({ ...VALID, peerDependencies: { '@nestjs/common': '^11.0.0' } }, { npm: empty.npm }), []);
   rmSync(empty.dir, { recursive: true, force: true });

@@ -417,7 +417,7 @@ test('não remove diretório que a execução não criou', () => {
   owned.removeAll();
 });
 
-/** Host sintético `@devtrack/foundation-api` e módulo técnico com layout `module` (D8). */
+/** Host sintético `@devtrack-solution/foundation-api` e módulo técnico com layout `module` (D8). */
 function technicalModule(options: { peer?: string; distJs?: string; implementer?: string; withConsumer?: boolean } = {}): {
   dir: string;
   request: ParsedRequest;
@@ -430,7 +430,7 @@ function technicalModule(options: { peer?: string; distJs?: string; implementer?
     fs.writeFileSync(path.join(root, relative), text);
   };
   write(host, 'package.json', JSON.stringify({
-    name: '@devtrack/foundation-api',
+    name: '@devtrack-solution/foundation-api',
     version: '0.1.0',
     exports: { './contracts': { types: './contracts.d.ts', default: './contracts.js' } },
   }));
@@ -446,7 +446,7 @@ function technicalModule(options: { peer?: string; distJs?: string; implementer?
     name: '@fixture/tech-module',
     version: '1.0.0',
     exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' }, './descriptor': './descriptor.json' },
-    peerDependencies: { '@devtrack/foundation-api': options.peer ?? '^0.1.0' },
+    peerDependencies: { '@devtrack-solution/foundation-api': options.peer ?? '^0.1.0' },
     conformance,
   }));
   write(moduleRoot, 'descriptor.json', JSON.stringify({
@@ -456,10 +456,10 @@ function technicalModule(options: { peer?: string; distJs?: string; implementer?
     provides: [{ id: 'fixed-clock', major: 1 }],
     requires: [],
   }));
-  write(moduleRoot, 'dist/index.d.ts', "import type { Clock } from '@devtrack/foundation-api/contracts';\nexport declare function fixed(at: number): Clock;\n");
-  write(moduleRoot, 'dist/index.js', options.distJs ?? "'use strict';\nrequire('@devtrack/foundation-api/contracts');\nexports.fixed = (at) => ({ now: () => at });\n");
+  write(moduleRoot, 'dist/index.d.ts', "import type { Clock } from '@devtrack-solution/foundation-api/contracts';\nexport declare function fixed(at: number): Clock;\n");
+  write(moduleRoot, 'dist/index.js', options.distJs ?? "'use strict';\nrequire('@devtrack-solution/foundation-api/contracts');\nexports.fixed = (at) => ({ now: () => at });\n");
   write(moduleRoot, 'conformance/consumer.ts', "import { fixed } from '@fixture/tech-module';\nexport const at: number = fixed(1).now();\n");
-  write(moduleRoot, 'conformance/implementer.ts', options.implementer ?? "import type { Clock } from '@devtrack/foundation-api/contracts';\nexport const clock: Clock = { now: () => 2 };\n");
+  write(moduleRoot, 'conformance/implementer.ts', options.implementer ?? "import type { Clock } from '@devtrack-solution/foundation-api/contracts';\nexport const clock: Clock = { now: () => 2 };\n");
   write(moduleRoot, 'conformance/boot.js', "'use strict';\nconst m = require('@fixture/tech-module');\nprocess.exit(m.fixed(3).now() === 3 ? 0 : 1);\n");
   const request = requestFor(moduleRoot, host, {
     profile: {
@@ -509,12 +509,12 @@ test('módulo técnico: fixtures declaradas, fronteira module, boot e peers cont
 
 test('módulo técnico: import interno da Foundation reprova a fronteira module', async () => {
   const { dir, request } = technicalModule({
-    distJs: "'use strict';\nrequire('@devtrack/foundation-api/dist/core/internal');\nexports.fixed = (at) => ({ now: () => at });\n",
+    distJs: "'use strict';\nrequire('@devtrack-solution/foundation-api/dist/core/internal');\nexports.fixed = (at) => ({ now: () => at });\n",
   });
   const { report } = await runConformance({ request, outDir: path.join(dir, 'out') });
   assert.equal(statusOf(report, 'boundaries')?.status, 'failed');
   assert.equal(statusOf(report, 'boundaries')?.reason, 'foundation-internal-import');
-  assert.deepEqual(statusOf(report, 'boundaries')?.evidence, ['dist/index.js -> @devtrack/foundation-api/dist/core/internal']);
+  assert.deepEqual(statusOf(report, 'boundaries')?.evidence, ['dist/index.js -> @devtrack-solution/foundation-api/dist/core/internal']);
   assert.equal(report.result, 'failed');
   fs.rmSync(dir, { recursive: true, force: true });
 });
@@ -528,7 +528,7 @@ test('módulo técnico: fixture não declarada fica not-run e fixture que não c
   fs.rmSync(missing.dir, { recursive: true, force: true });
 
   const broken = technicalModule({
-    implementer: "import type { Clock } from '@devtrack/foundation-api/contracts';\nexport const clock: Clock = { now: () => 'texto' };\n",
+    implementer: "import type { Clock } from '@devtrack-solution/foundation-api/contracts';\nexport const clock: Clock = { now: () => 'texto' };\n",
   });
   const second = await runConformance({ request: broken.request, outDir: path.join(broken.dir, 'out') });
   assert.equal(statusOf(second.report, 'implementer')?.status, 'failed');
@@ -543,7 +543,7 @@ test('módulo técnico: peer da Foundation fora da faixa do host reprova a insta
   const install = statusOf(report, 'install');
   assert.equal(install?.status, 'failed');
   assert.equal(install?.reason, 'installer-rejected');
-  assert.match(install?.evidence?.join('\n') ?? '', /@devtrack\/foundation-api@\^0\.2\.0.*instalado 0\.1\.0/);
+  assert.match(install?.evidence?.join('\n') ?? '', /@devtrack-solution\/foundation-api@\^0\.2\.0.*instalado 0\.1\.0/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -557,10 +557,10 @@ test('api-cli: resolve checkout irmão, variável, explícito e pacote instalado
     // Monorepo: foundation-api com api-cli irmão (fonte) e também um pacote instalado.
     const mono = path.join(base, 'mono');
     const monoFoundation = path.join(mono, 'foundation-api');
-    write(path.join(monoFoundation, 'package.json'), '{"name":"@devtrack/foundation-api","version":"0.1.0"}');
+    write(path.join(monoFoundation, 'package.json'), '{"name":"@devtrack-solution/foundation-api","version":"0.1.0"}');
     write(path.join(mono, 'api-cli', 'src', 'validation.ts'));
-    const installedInMono = path.join(monoFoundation, 'node_modules', '@devtrack', 'api-cli');
-    write(path.join(installedInMono, 'package.json'), '{"name":"@devtrack/api-cli","version":"0.1.0"}');
+    const installedInMono = path.join(monoFoundation, 'node_modules', '@devtrack-solution', 'api-cli');
+    write(path.join(installedInMono, 'package.json'), '{"name":"@devtrack-solution/api-cli","version":"0.1.0"}');
     write(path.join(installedInMono, 'dist', 'src', 'validation.js'));
     const sibling = resolveApiCli(undefined, {}, monoFoundation);
     assert.equal(sibling?.layout, 'source');
@@ -569,10 +569,10 @@ test('api-cli: resolve checkout irmão, variável, explícito e pacote instalado
 
     // Repositório isolado: só o pacote publicado em node_modules.
     const isolated = path.join(base, 'devtrack-foundation-core');
-    write(path.join(isolated, 'package.json'), '{"name":"@devtrack/foundation-api","version":"0.1.0"}');
+    write(path.join(isolated, 'package.json'), '{"name":"@devtrack-solution/foundation-api","version":"0.1.0"}');
     assert.equal(resolveApiCli(undefined, {}, isolated), null);
-    const installed = path.join(isolated, 'node_modules', '@devtrack', 'api-cli');
-    write(path.join(installed, 'package.json'), '{"name":"@devtrack/api-cli","version":"0.1.0"}');
+    const installed = path.join(isolated, 'node_modules', '@devtrack-solution', 'api-cli');
+    write(path.join(installed, 'package.json'), '{"name":"@devtrack-solution/api-cli","version":"0.1.0"}');
     write(path.join(installed, 'dist', 'src', 'validation.js'));
     const fromPackage = resolveApiCli(undefined, {}, isolated);
     assert.equal(fromPackage?.layout, 'package');

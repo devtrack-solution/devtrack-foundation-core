@@ -65,7 +65,7 @@ Regra da arquitetura (design, seção 3): runtime pode desligar o que já foi in
 }
 ```
 
-- O artefato inclui um `.npmrc` com `legacy-peer-deps=true`. O peer `@devtrack/foundation-api` das extensões (como `@devtrack/jwt-auth`) é o próprio host, que o npm não reconhece como instalado e tentaria baixar. Os peers foram validados pelo `api-cli` na instalação. O mesmo arquivo vale para o `npm ci` de implantação e rollback.
+- O artefato inclui um `.npmrc` com `legacy-peer-deps=true`. O peer `@devtrack-solution/foundation-api` das extensões (como `@devtrack-solution/jwt-auth`) é o próprio host, que o npm não reconhece como instalado e tentaria baixar. Os peers foram validados pelo `api-cli` na instalação. O mesmo arquivo vale para o `npm ci` de implantação e rollback.
 - `packages` vem de `npm ls --all --omit=dev --json` depois da instalação. Cada entrada traz versão e `integrity` do lock do artefato. `directOf` lista o núcleo (`core`), o nativo ou a extensão que declara o pacote como dependência direta; transitivos têm lista vazia.
 - Peers opcionais ausentes (ex.: `class-transformer` de `@nestjs/common`) aparecem no `npm ls` sem versão e não são instalados; não entram no inventário.
 - O inventário não tem timestamp: dois builds do mesmo perfil no mesmo Node produzem o mesmo arquivo (coberto por teste de determinismo).

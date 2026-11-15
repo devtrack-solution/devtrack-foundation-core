@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, '../..');
 
 test('compiled contracts expose a stable API without bootstrap or framework imports', () => {
   const output = execFileSync(process.execPath, ['-e', `
-    const contracts = require('@devtrack/foundation-api/contracts');
+    const contracts = require('@devtrack-solution/foundation-api/contracts');
     console.log(JSON.stringify({ major: contracts.FOUNDATION_API_MAJOR,
       auth: typeof contracts.AuthenticationService,
       token: String(contracts.AUTHENTICATION_SERVICE), files: Object.keys(require.cache) }));
@@ -22,7 +22,7 @@ test('compiled contracts expose a stable API without bootstrap or framework impo
 
 test('the neutral DTO schema contract is exported without loading Nest or Swagger', () => {
   const output = execFileSync(process.execPath, ['-e', `
-    const contracts = require('@devtrack/foundation-api/contracts');
+    const contracts = require('@devtrack-solution/foundation-api/contracts');
     console.log(JSON.stringify({ define: typeof contracts.defineDtoSchema,
       get: typeof contracts.getDtoSchema, files: Object.keys(require.cache) }));
   `], { cwd: root, encoding: 'utf8', timeout: 10000 });
@@ -46,8 +46,8 @@ test('default composition and AppModule load without @nestjs/swagger in require.
 function compileConsumer(source, types = []) {
   const fixture = fs.mkdtempSync(path.join(os.tmpdir(), 'foundation-contract-'));
   try {
-    fs.mkdirSync(path.join(fixture, 'node_modules/@devtrack'), { recursive: true });
-    fs.symlinkSync(root, path.join(fixture, 'node_modules/@devtrack/foundation-api'), 'dir');
+    fs.mkdirSync(path.join(fixture, 'node_modules/@devtrack-solution'), { recursive: true });
+    fs.symlinkSync(root, path.join(fixture, 'node_modules/@devtrack-solution/foundation-api'), 'dir');
     if (types.length) fs.symlinkSync(path.join(root, 'node_modules/@types'), path.join(fixture, 'node_modules/@types'), 'dir');
     fs.writeFileSync(path.join(fixture, 'consumer.ts'), source);
     fs.writeFileSync(path.join(fixture, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, module: 'NodeNext', moduleResolution: 'NodeNext', target: 'ES2023', types, noEmit: true }, files: ['consumer.ts'] }));
@@ -57,8 +57,8 @@ function compileConsumer(source, types = []) {
 
 test('an external TypeScript consumer uses pure contracts without Node ambient types', () => {
   compileConsumer(`
-    import { FOUNDATION_API_MAJOR, AuthenticationService, createAuditContext, resolveComposition } from '@devtrack/foundation-api/contracts';
-    import type { PasswordCredentials, AuthenticationResult, AccessTokenIssuer, UnitOfWork, AuditContext, AuditEntry, OperationContext, ResolvedModuleSelection } from '@devtrack/foundation-api/contracts';
+    import { FOUNDATION_API_MAJOR, AuthenticationService, createAuditContext, resolveComposition } from '@devtrack-solution/foundation-api/contracts';
+    import type { PasswordCredentials, AuthenticationResult, AccessTokenIssuer, UnitOfWork, AuditContext, AuditEntry, OperationContext, ResolvedModuleSelection } from '@devtrack-solution/foundation-api/contracts';
     const input: PasswordCredentials = { username: 'test', password: 'secret' };
     const result: AuthenticationResult = { accessToken: 'opaque', tokenType: 'Bearer', expiresAt: 1, subjectId: 's', sessionId: 'x' };
     // @ts-expect-error JWT claims are not part of the neutral result.
@@ -81,8 +81,8 @@ test('an external TypeScript consumer uses pure contracts without Node ambient t
 
 test('Nest registration requires named mandatory ports and rejects the legacy API', () => {
   compileConsumer(`
-    import { FoundationCoreModule } from '@devtrack/foundation-api/nest';
-    import type { AuthenticationRegistration, AuthenticationPortBindings } from '@devtrack/foundation-api/nest';
+    import { FoundationCoreModule } from '@devtrack-solution/foundation-api/nest';
+    import type { AuthenticationRegistration, AuthenticationPortBindings } from '@devtrack-solution/foundation-api/nest';
     const registration: AuthenticationRegistration = { ports: { identities: 'I', sessions: 'S', tokens: 'T', clock: 'C' } };
     FoundationCoreModule.withAuthentication(registration);
     // @ts-expect-error Session binding is required.

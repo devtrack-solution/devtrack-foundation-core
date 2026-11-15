@@ -19,9 +19,9 @@ function moduleDir(manifest: Record<string, unknown>): string {
 }
 
 const VALID = {
-  name: '@devtrack/sample',
+  name: '@devtrack-solution/sample',
   version: '1.2.3',
-  peerDependencies: { '@devtrack/foundation-api': '^0.1.0' },
+  peerDependencies: { '@devtrack-solution/foundation-api': '^0.1.0' },
   exports: { '.': './dist/index.js', './descriptor': './dist/sample.descriptor.json' },
 };
 
@@ -37,9 +37,9 @@ describe('qualificação contra a Foundation publicada (pipeline dos módulos)',
 
   it('manifesto: exige peer da Foundation e export "./descriptor"', () => {
     assert.deepEqual(readModuleManifest(moduleDir(VALID)), {
-      name: '@devtrack/sample', version: '1.2.3', peerRange: '^0.1.0', descriptorFile: 'dist/sample.descriptor.json',
+      name: '@devtrack-solution/sample', version: '1.2.3', peerRange: '^0.1.0', descriptorFile: 'dist/sample.descriptor.json',
     });
-    assert.throws(() => readModuleManifest(moduleDir({ ...VALID, peerDependencies: {} })), /não declara @devtrack\/foundation-api/);
+    assert.throws(() => readModuleManifest(moduleDir({ ...VALID, peerDependencies: {} })), /não declara @devtrack-solution\/foundation-api/);
     assert.throws(() => readModuleManifest(moduleDir({ ...VALID, exports: { '.': './dist/index.js' } })), /"\.\/descriptor"/);
   });
 
@@ -69,7 +69,7 @@ describe('qualificação contra a Foundation publicada (pipeline dos módulos)',
       });
       await assert.rejects(
         qualifyPublished(parseOptions(['--module', dir, '--out', path.join(dir, 'out'), '--registry', `http://127.0.0.1:${port}`], {})),
-        /peer "@devtrack\/foundation-api@\^0\.1\.0" não tem versão publicada/,
+        /peer "@devtrack-solution\/foundation-api@\^0\.1\.0" não tem versão publicada/,
       );
     } finally {
       server.kill();

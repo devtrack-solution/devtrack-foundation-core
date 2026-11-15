@@ -64,7 +64,7 @@ Recursos registrados pelo próprio run:
 | Host | Apple M1 Max, 10 CPUs lógicas, 64 GiB, macOS 27.2 (arm64) |
 | Node | v24.21.0 |
 | Docker | servidor 29.8.0; VM com 10 CPUs e 15,1 GiB |
-| Pacotes | `foundation-api` 0.0.1, `@devtrack/foundation-contacts` 0.1.0 |
+| Pacotes | `foundation-api` 0.0.1, `@devtrack-solution/foundation-contacts` 0.1.0 |
 | Contêineres | PostgreSQL `f502d2294536`, Redis `03dd916d7fa1` |
 
 Composição do processo de API: persistência TypeORM (migrations no boot), fila BullMQ só

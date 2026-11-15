@@ -113,7 +113,7 @@ export function hasEscapingSymlink(root: string): string | null {
   return walk(root);
 }
 
-const FOUNDATION_PACKAGE = '@devtrack/foundation-api';
+const FOUNDATION_PACKAGE = '@devtrack-solution/foundation-api';
 const LEGACY_FOUNDATION_PACKAGE = 'foundation-api';
 const FOUNDATION_PUBLIC = new Set([`${FOUNDATION_PACKAGE}/contracts`, `${FOUNDATION_PACKAGE}/nest`]);
 
@@ -158,7 +158,7 @@ export function hostModulesDir(hostRoot: string): string | null {
 
 /**
  * Monta um `node_modules` ao lado da cópia do módulo, para boot e fixtures resolverem pacotes
- * como num consumidor instalado (D8): dependências do host por link e `@devtrack/foundation-api`
+ * como num consumidor instalado (D8): dependências do host por link e `@devtrack-solution/foundation-api`
  * apontando para o host. O próprio módulo não é ligado, para resolver sempre a cópia verificada.
  */
 export function linkDependencyRoot(target: string, hostRoot: string, moduleName: string): void {

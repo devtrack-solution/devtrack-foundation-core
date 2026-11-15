@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import path from 'node:path';
 
 /**
- * Onde o kit encontrou o instalador canônico (`@devtrack/api-cli`).
+ * Onde o kit encontrou o instalador canônico (`@devtrack-solution/api-cli`).
  *
  * - `source`: checkout do api-cli (monorepo), com `src/*.ts` e o bin compilado em `dist/src`.
  * - `package`: pacote publicado, só com `dist/src/*.js`.
@@ -17,7 +17,7 @@ export interface ApiCliLocation {
 }
 
 export const API_CLI_ROOT_ENV = 'DEVTRACK_API_CLI_ROOT';
-export const API_CLI_PACKAGE = '@devtrack/api-cli';
+export const API_CLI_PACKAGE = '@devtrack-solution/api-cli';
 
 /** Raiz da Foundation que contém o kit (`foundation-api/tooling/module-conformance/runner`). */
 const FOUNDATION_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -44,7 +44,7 @@ function installedPackageRoot(from: string): string | null {
 
 /**
  * Resolve o api-cli, nesta ordem: caminho explícito, variável `DEVTRACK_API_CLI_ROOT`, pasta irmã
- * da Foundation (monorepo) e pacote `@devtrack/api-cli` instalado no `node_modules` da Foundation
+ * da Foundation (monorepo) e pacote `@devtrack-solution/api-cli` instalado no `node_modules` da Foundation
  * (repositório isolado e CI). Caminho explícito ou variável que não aponte para um api-cli válido
  * resulta em `null`, sem cair nas demais opções, para que a configuração errada apareça no relatório.
  */

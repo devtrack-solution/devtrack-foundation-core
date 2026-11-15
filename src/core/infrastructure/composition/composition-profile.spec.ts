@@ -239,18 +239,18 @@ extensions: []
     });
   }
 
-  it('rejects JWT selected without the @devtrack/jwt-auth package and names the package', () => {
+  it('rejects JWT selected without the @devtrack-solution/jwt-auth package and names the package', () => {
     const profile = `foundationApiMajor: 1
 natives:
   - id: native/http-security
 extensions:
   - id: ext/jwt-auth
-    packageName: '@devtrack/jwt-auth'
+    packageName: '@devtrack-solution/jwt-auth'
     version: 0.1.0
     integrity: ${INTEGRITY}
 `;
     expect(() => resolveCompositionProfile(profile, [])).toThrow(
-      /Unknown extension ext\/jwt-auth: install @devtrack\/jwt-auth@0\.1\.0/,
+      /Unknown extension ext\/jwt-auth: install @devtrack-solution\/jwt-auth@0\.1\.0/,
     );
     expect(profileCode(profile)).toBe('PROFILE_UNKNOWN_EXTENSION');
   });
@@ -264,17 +264,17 @@ extensions:
     );
   });
 
-  it('rejects Swagger selected without @devtrack/swagger-adapter and the former native id', () => {
+  it('rejects Swagger selected without @devtrack-solution/swagger-adapter and the former native id', () => {
     const missingPackage = `foundationApiMajor: 1
 natives: []
 extensions:
   - id: ext/swagger-adapter
-    packageName: '@devtrack/swagger-adapter'
+    packageName: '@devtrack-solution/swagger-adapter'
     version: 0.1.0
     integrity: ${INTEGRITY}
 `;
     expect(() => resolveCompositionProfile(missingPackage, [])).toThrow(
-      /install @devtrack\/swagger-adapter@0\.1\.0/,
+      /install @devtrack-solution\/swagger-adapter@0\.1\.0/,
     );
     expect(
       profileCode(

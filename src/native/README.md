@@ -4,7 +4,7 @@ Adapters técnicos que a Foundation distribui. Cada nativo entra na composição
 
 ## Implementados
 
-JWT Auth e Swagger não são mais nativos: são os módulos oficiais `@devtrack/jwt-auth` (`ext/jwt-auth`) e `@devtrack/swagger-adapter` (`ext/swagger-adapter`), em repositórios e pacotes próprios, instalados pelo `api-cli`. Ver `docs/core-contracts.md`, seções 6.9 e 7.2.1.
+JWT Auth e Swagger não são mais nativos: são os módulos oficiais `@devtrack-solution/jwt-auth` (`ext/jwt-auth`) e `@devtrack-solution/swagger-adapter` (`ext/swagger-adapter`), em repositórios e pacotes próprios, instalados pelo `api-cli`. Ver `docs/core-contracts.md`, seções 6.9 e 7.2.1.
 
 - **opentelemetry** (`src/native/opentelemetry/`, entrypoint `foundation-api/native/opentelemetry`): SDK único do processo sobre `@opentelemetry/sdk-node@0.301.0` (versões exatas, ver `docs/core-contracts.md`, seção 8). Provê `telemetry` major 1. Identidade do host por `FOUNDATION_SERVICE_NAME`, `FOUNDATION_SERVICE_VERSION` e `FOUNDATION_DEPLOYMENT_ENVIRONMENT`; exportação OTLP/HTTP por `OTEL_EXPORTER_OTLP_ENDPOINT`; filas e prazos com limites explícitos. É inicializado antes de qualquer outro módulo pelo arquivo gerado `src/composition/instrumentation.generated.ts`, importado na primeira linha de `src/main.ts`. Não monta módulo Nest. Implementa as portas neutras de `core/application/observability/`.
 - **aws-s3** (`src/native/aws-s3/`, entrypoint `foundation-api/native/aws-s3`): adapter de `ObjectStorage` sobre `@aws-sdk/client-s3`. `AwsS3Module.registerAsync` recebe as opções do host pelo token `awsS3Options`; credenciais vêm da cadeia padrão do SDK, nunca da configuração. Provê `object-storage` major 1, com o token `AWS_S3_OBJECT_STORAGE`. Selecionável pelo perfil.

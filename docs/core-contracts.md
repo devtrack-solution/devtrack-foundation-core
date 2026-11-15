@@ -14,7 +14,7 @@ A Foundation compõe infraestrutura operacional. Cada módulo de negócio manté
 
 Esta versão **não** entrega endpoint HTTP de login, de renovação ou de revogação, cadastro de credenciais, adapter real de hash de senha, provedor federado concreto (OIDC/OAuth) nem entrada pública de filas: `native/queue-bullmq` existe no código, mas ainda não está em `package.json#exports` nem no catálogo de composição. A telemetria (seção 8) e o build seletivo do artefato (`docs/selective-build.md`) existem e são descritos em suas próprias seções.
 
-Os nativos entregues são persistência TypeORM com sessões compartilhadas (`native/persistence-typeorm`, `docs/persistence.md` e `docs/sessions.md`), auditoria durável (`docs/audit.md`), idempotência (`docs/idempotency.md`), storage S3 (`native/aws-s3`), e Redis para rate limit e readiness (`native/cache-redis`, `docs/admission.md`). Cada um só entra no grafo quando o host o importa ou o seleciona no perfil. JWT Auth deixou de ser nativo: é o módulo oficial `@devtrack/jwt-auth` (`ext/jwt-auth`, seção 7.2.1), instalado pelo `api-cli` como extensão npm. Guard, contexto e tradução HTTP existem como mecanismos opt-in do Nest (seção 7.6).
+Os nativos entregues são persistência TypeORM com sessões compartilhadas (`native/persistence-typeorm`, `docs/persistence.md` e `docs/sessions.md`), auditoria durável (`docs/audit.md`), idempotência (`docs/idempotency.md`), storage S3 (`native/aws-s3`), e Redis para rate limit e readiness (`native/cache-redis`, `docs/admission.md`). Cada um só entra no grafo quando o host o importa ou o seleciona no perfil. JWT Auth deixou de ser nativo: é o módulo oficial `@devtrack-solution/jwt-auth` (`ext/jwt-auth`, seção 7.2.1), instalado pelo `api-cli` como extensão npm. Guard, contexto e tradução HTTP existem como mecanismos opt-in do Nest (seção 7.6).
 
 ## 2. Entrypoints
 
@@ -22,8 +22,8 @@ Os nativos entregues são persistência TypeORM com sessões compartilhadas (`na
 | --- | --- | --- |
 | `foundation-api/contracts` | Tipos, símbolos de injeção e classes/funções puras: `AuthenticationService` (login, federação, `refresh`, `revokeSession`), `PasswordCredentialsService`, `resolveComposition`, `createAuditContext`, `readAuditTrail`, `AuditReader`, `AUDIT_READ_PERMISSION`, `createAuditRetentionPolicy`, `decideRotation`, `ObjectStorage`, `ObjectStorageError`, `IdempotencyService`, `IdempotencyStore`, `InMemoryIdempotencyStore`, `canonicalJson`, `CompositionError`, `FOUNDATION_API_MAJOR`, e o contrato neutro de DTO `defineDtoSchema` / `getDtoSchema` (seção 6.9). | Application e camadas externas, respeitando a origem de cada contrato. Domain de módulo pode consumir somente tipos de Domain via `import type`; não depende de portas, serviços ou funções de Application. Não carrega Nest, ORM, SDK nem inicia servidor (verificado por `test:contracts`). |
 | `foundation-api/nest` | `FoundationCoreModule` (`withAuthentication`, `withHttpSecurity`, `withAdmission`), os tipos de registro, `AuthenticationGuard`, `RequirePermissions`, interceptors, filter, pipe e `AsyncOperationContextStore`. | Somente Infrastructure/composition root. |
-| `@devtrack/jwt-auth` (pacote próprio) | `JwtAuthModule` (`register`, `registerAsync`), `JWT_AUTH_ISSUER`, `JWT_AUTH_VERIFIER`, `JwtAccessTokenAdapter`, tipos de configuração, `JwtAuthConfigError` e o descriptor em `./descriptor`. | Composition root do host (Nest), depois de `api-cli install`. Não faz parte do pacote `@devtrack/foundation-api`. |
-| `@devtrack/swagger-adapter` (pacote próprio) | `SwaggerAdapterModule` (`register`, `registerAsync`), `SWAGGER_ADAPTER_DEFAULT_PATH`, tipos de configuração, `SwaggerAdapterConfigError` e o descriptor em `./descriptor`. | Composition root do host (Nest), via composição gerada depois de `api-cli install`. Não faz parte do pacote `@devtrack/foundation-api`. |
+| `@devtrack-solution/jwt-auth` (pacote próprio) | `JwtAuthModule` (`register`, `registerAsync`), `JWT_AUTH_ISSUER`, `JWT_AUTH_VERIFIER`, `JwtAccessTokenAdapter`, tipos de configuração, `JwtAuthConfigError` e o descriptor em `./descriptor`. | Composition root do host (Nest), depois de `api-cli install`. Não faz parte do pacote `@devtrack-solution/foundation-api`. |
+| `@devtrack-solution/swagger-adapter` (pacote próprio) | `SwaggerAdapterModule` (`register`, `registerAsync`), `SWAGGER_ADAPTER_DEFAULT_PATH`, tipos de configuração, `SwaggerAdapterConfigError` e o descriptor em `./descriptor`. | Composition root do host (Nest), via composição gerada depois de `api-cli install`. Não faz parte do pacote `@devtrack-solution/foundation-api`. |
 | `foundation-api/native/opentelemetry` | `startOpenTelemetry`, `readOpenTelemetryConfig`, `createOpenTelemetryOperationSignals`, `OPEN_TELEMETRY_LIMITS` e `OpenTelemetryConfigError`. O bootstrap que inicia o SDK (`bootstrap.ts`) não faz parte do entrypoint. | Inicialização antecipada pelo arquivo gerado (seção 8). Não é exportado por `foundation-api/contracts`. |
 | `foundation-api/native/persistence-typeorm` | `PersistenceTypeOrmModule` (`register`, `registerAsync`), `PERSISTENCE_DATA_SOURCE`, `PERSISTENCE_CONTRIBUTIONS` (catálogo da Foundation), `buildPersistenceCatalog`, `TypeOrmUnitOfWork`, `TypeOrmRepositoryBase`, configuração (`PersistenceConfigInput`, `persistenceConfigFromEnv`) e as implementações TypeORM de auditoria, idempotência e sessões (`docs/persistence.md`, `docs/audit.md`, `docs/idempotency.md`, `docs/sessions.md`). | Composition root do host (Nest) e módulos de negócio que declaram entidades `*.orm-entity.ts`. Não é exportado por `foundation-api/contracts`. |
 | `foundation-api/native/aws-s3` | `AwsS3Module` (`register`, `registerAsync`), `AWS_S3_OBJECT_STORAGE`, `S3ObjectStorage`, `createS3ObjectStorage`, `resolveAwsS3Options`, tipos de configuração e `AwsS3ConfigError`. | Composition root do host (Nest). Não é exportado por `foundation-api/contracts`. |
@@ -245,7 +245,7 @@ natives:
     features: []
 extensions:
   - id: ext/jwt-auth
-    packageName: '@devtrack/jwt-auth'
+    packageName: '@devtrack-solution/jwt-auth'
     version: 0.1.0
     integrity: sha512-...
   - id: ext/protected-demo
@@ -281,7 +281,7 @@ Erros do resolvedor (`CompositionError`, seção 6.3) mantêm seus códigos, por
 
 ### 6.7 Catálogo nativo e capacidade `authenticator`
 
-O catálogo em `src/core/application/modules/native-catalog.ts` é metadata pura, sem import de Nest. Nenhum nativo provê `access-token`: quem provê é o módulo oficial `ext/jwt-auth` (pacote `@devtrack/jwt-auth`) ou outra extensão com essa capacidade.
+O catálogo em `src/core/application/modules/native-catalog.ts` é metadata pura, sem import de Nest. Nenhum nativo provê `access-token`: quem provê é o módulo oficial `ext/jwt-auth` (pacote `@devtrack-solution/jwt-auth`) ou outra extensão com essa capacidade.
 
 | Native | Provê | Requer |
 | --- | --- | --- |
@@ -313,7 +313,7 @@ Regra: **módulo nativo ou extensão que expõe operação protegida DEVE declar
 - **Extensões configuráveis (bloco `composition`).** O descriptor pode declarar `hostOptions` (`token` e `type`) e `capabilityTokens` (export do pacote por capacidade fornecida). Com `hostOptions`, o gerador emite `<Export>.registerAsync({ inject: [COMPOSITION_HOST_TOKENS.<chave>], useFactory })` em vez do import simples. Com `capabilityTokens['access-token']`, o `http-security` liga a porta de tokens ao export da extensão. O bloco é revalidado no gerador (`GENERATOR_INVALID_EXTENSION`: token fora de `[a-z0-9.-]`, identificador inválido, capacidade fora de `provides` ou o mesmo token declarado por dois módulos) e no `api-cli`. Nunca é código executável.
 - **Limite.** A integridade do tarball não é verificada pelo gerador; isso pertence ao instalador (tarefa 2.3). O build seletivo (`docs/selective-build.md`) reutiliza o gerador dentro de uma área limpa.
 
-### 6.9 Documentação de API (módulo oficial `@devtrack/swagger-adapter`) e contrato neutro de DTO
+### 6.9 Documentação de API (módulo oficial `@devtrack-solution/swagger-adapter`) e contrato neutro de DTO
 
 Tarefa 2.4. Dois pedaços separados, para que módulos de negócio nunca importem `@nestjs/swagger`:
 
@@ -328,7 +328,7 @@ Tarefa 2.4. Dois pedaços separados, para que módulos de negócio nunca importe
   });
   ```
 
-- **Adapter (pacote `@devtrack/swagger-adapter`, extensão `ext/swagger-adapter`; saiu de `src/native/swagger-adapter` na change `split-foundation-repositories`).** Quando selecionado, o `SwaggerAdapterModule` traduz o registro para metadata do `@nestjs/swagger` (`ApiProperty`), gera o documento OpenAPI com `SwaggerModule.createDocument` e o expõe em `${path}` (UI, padrão `/docs`) e `${path}-json`. Título, versão e caminho vêm do host pelo token `swaggerOptions`; o perfil só seleciona `ext/swagger-adapter`, e o bloco `composition` do descriptor declara o token `swagger.options`. Validação recusa título/versão vazios ou acima de 200 caracteres e caminhos fora do formato `/segmento/segmento` (sem barra final, `..`, query ou segmentos vazios). A instalação ocorre em `onModuleInit`, antes do fallback 404 do Express.
+- **Adapter (pacote `@devtrack-solution/swagger-adapter`, extensão `ext/swagger-adapter`; saiu de `src/native/swagger-adapter` na change `split-foundation-repositories`).** Quando selecionado, o `SwaggerAdapterModule` traduz o registro para metadata do `@nestjs/swagger` (`ApiProperty`), gera o documento OpenAPI com `SwaggerModule.createDocument` e o expõe em `${path}` (UI, padrão `/docs`) e `${path}-json`. Título, versão e caminho vêm do host pelo token `swaggerOptions`; o perfil só seleciona `ext/swagger-adapter`, e o bloco `composition` do descriptor declara o token `swagger.options`. Validação recusa título/versão vazios ou acima de 200 caracteres e caminhos fora do formato `/segmento/segmento` (sem barra final, `..`, query ou segmentos vazios). A instalação ocorre em `onModuleInit`, antes do fallback 404 do Express.
 
 - **Sem seleção.** O módulo não entra no arquivo gerado (que não contém `swagger`), nada é exposto (`/docs` e `/docs-json` respondem 404), e o registro contratual continua válido.
 
@@ -336,7 +336,7 @@ Tarefa 2.4. Dois pedaços separados, para que módulos de negócio nunca importe
 
 - **Testes.** No pacote, `swagger-adapter/test/swagger-adapter.e2e-spec.ts` registra o módulo como o gerador faz (`registerAsync` pelo token de host `swagger.options`) e sobe Nest com uma fixture de extensão (`test/fixtures/fixture-contacts.ts`, que só usa o contrato neutro). `GET /docs-json` devolve o schema com `required`, `maxLength`, `minLength`, `minimum` e `maximum`; a mesma rota de POST funciona com e sem documentação; sem o módulo, `/docs` e `/docs-json` dão 404. Na Foundation, o teste do gerador confere que o perfil padrão não menciona swagger e que `ext/swagger-adapter` é registrado com o mesmo token. Em `test/contracts/public-entrypoint.test.cjs`: importar `foundation-api/contracts` não carrega Nest nem swagger, e a composição padrão mais o `AppModule` carregados em processo filho não colocam `@nestjs/swagger` no `require.cache`.
 
-Cenário `native/http-security` com `access-token` vindo de extensão npm coberto por `test/composition-native.e2e-spec.ts`. O teste instala no `node_modules` temporário um pacote fixture (JS e tipos, como um pacote publicado) com bloco `composition`, gera o módulo, compila-o pelo Jest e sobe o Nest com um módulo `@Global()` de host. Verifica 401 sem token, 200 com token aceito pelo verificador da extensão e sessão ativa, 401 com token desconhecido ou sessão revogada, e falha de boot para cada host token ausente. O JWT real com a Foundation é coberto pelos testes do pacote `@devtrack/jwt-auth`.
+Cenário `native/http-security` com `access-token` vindo de extensão npm coberto por `test/composition-native.e2e-spec.ts`. O teste instala no `node_modules` temporário um pacote fixture (JS e tipos, como um pacote publicado) com bloco `composition`, gera o módulo, compila-o pelo Jest e sobe o Nest com um módulo `@Global()` de host. Verifica 401 sem token, 200 com token aceito pelo verificador da extensão e sessão ativa, 401 com token desconhecido ou sessão revogada, e falha de boot para cada host token ausente. O JWT real com a Foundation é coberto pelos testes do pacote `@devtrack-solution/jwt-auth`.
 
 ## 7. Autenticação
 
@@ -395,9 +395,9 @@ interface AuthenticationResult {
 }
 ```
 
-#### 7.2.1 Adapter JWT (módulo oficial `@devtrack/jwt-auth`, `ext/jwt-auth`)
+#### 7.2.1 Adapter JWT (módulo oficial `@devtrack-solution/jwt-auth`, `ext/jwt-auth`)
 
-Implementa `AccessTokenIssuer` e `AccessTokenVerifier` com `jose@5.10.0` (versão exata). A versão 5 é a que mantém build CommonJS, compatível com o projeto e com Jest/ts-jest; a 6 é ESM-only. Não há criptografia JWT própria. O código saiu de `src/native/jwt-auth` para o pacote `jwt-auth/` (change `split-foundation-repositories`), que importa só `@devtrack/foundation-api/contracts` e `/nest`. Instalação e configuração estão no README do pacote.
+Implementa `AccessTokenIssuer` e `AccessTokenVerifier` com `jose@5.10.0` (versão exata). A versão 5 é a que mantém build CommonJS, compatível com o projeto e com Jest/ts-jest; a 6 é ESM-only. Não há criptografia JWT própria. O código saiu de `src/native/jwt-auth` para o pacote `jwt-auth/` (change `split-foundation-repositories`), que importa só `@devtrack-solution/foundation-api/contracts` e `/nest`. Instalação e configuração estão no README do pacote.
 
 - **Algoritmos:** allowlist explícita, hoje `EdDSA` (Ed25519) e `ES256` (P-256). `none`, HS*, RS* e qualquer outro alg são rejeitados na configuração. O verificador aceita exatamente o alg configurado para o `kid` e não confia no header para escolher algoritmo.
 - **Chaves:** uma chave ativa (`signingKey`, privada, com `kid`) e um conjunto de verificação por `kid` (`verificationKeys`). Material aceito: `KeyObject` ou JWK. Chave antiga listada continua verificando; chave removida deixa de verificar. A chave ativa precisa estar no conjunto, com o mesmo alg e a mesma parte pública.

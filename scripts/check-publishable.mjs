@@ -1,7 +1,7 @@
 #!/usr/bin/env node
-// Verificação de publicação dos pacotes @devtrack (spec foundation-distribution).
+// Verificação de publicação dos pacotes @devtrack-solution (spec foundation-distribution).
 // Uso: devtrack-check-publishable [diretório do pacote] [--require-published-peers] [--registry <url>]
-//   --require-published-peers: cada peer do escopo @devtrack precisa ter, no registry, uma versão
+//   --require-published-peers: cada peer do escopo @devtrack-solution precisa ter, no registry, uma versão
 //   que satisfaça a faixa declarada (publicação ordenada: Foundation antes dos módulos).
 // Exit 0 quando publicável; exit 1 com a lista de violações.
 import { spawnSync } from 'node:child_process';
@@ -9,7 +9,7 @@ import { readFileSync, realpathSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const REQUIRED_SCOPE = '@devtrack/';
+export const REQUIRED_SCOPE = '@devtrack-solution/';
 const EXACT_SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 const NON_PORTABLE_SPEC =
   /^(?:file:|link:|portal:|workspace:|git\+|git:|git@|github:|gitlab:|bitbucket:|https?:|\.{1,2}\/|\/|~\/)/;
@@ -36,7 +36,7 @@ export function findPublishViolations(manifest) {
 }
 
 /**
- * Peers `@devtrack/*` sem versão publicada que satisfaça a faixa. Consulta o registry com
+ * Peers `@devtrack-solution/*` sem versão publicada que satisfaça a faixa. Consulta o registry com
  * `npm view <nome>@<faixa> version --json` (honra o `.npmrc`, inclusive o registry do escopo).
  */
 export function findUnpublishedPeers(manifest, { registry, npm = 'npm' } = {}) {

@@ -61,8 +61,8 @@ O `install` faz, nesta ordem (`api-cli/README.md`):
 Qualquer falha desfaz perfil, arquivo gerado, `package.json` e lock. `uninstall` recusa se a extensão
 participa de `bindings`.
 
-**Peer do host (automático):** extensões instaladas, como `@devtrack/jwt-auth`,
-`@devtrack/swagger-adapter` e Contacts, importam `@devtrack/foundation-api` em runtime. No host, esse
+**Peer do host (automático):** extensões instaladas, como `@devtrack-solution/jwt-auth`,
+`@devtrack-solution/swagger-adapter` e Contacts, importam `@devtrack-solution/foundation-api` em runtime. No host, esse
 pacote é o próprio projeto raiz, e o `api-cli` instala com `--legacy-peer-deps`, sem trazer o peer.
 Por isso, depois de cada `npm install`/`npm uninstall` que executa, o `api-cli` sincroniza
 `node_modules/<nome do host>` como symlink para a raiz, enquanto houver extensão selecionada que declara o
@@ -107,7 +107,7 @@ extensions: []        # id, packageName, version (exata), integrity (sha...), fe
 - Ids de nativo aceitos: `native/http-security`,
   `native/aws-s3`, `native/cache-redis`, `native/queue-bullmq`, `native/persistence-typeorm`,
   `native/opentelemetry` (`src/core/infrastructure/composition/native-sources.ts`). JWT Auth e Swagger são as
-  extensões `ext/jwt-auth` e `ext/swagger-adapter` (pacotes `@devtrack/jwt-auth` e `@devtrack/swagger-adapter`),
+  extensões `ext/jwt-auth` e `ext/swagger-adapter` (pacotes `@devtrack-solution/jwt-auth` e `@devtrack-solution/swagger-adapter`),
   instaladas pelo `api-cli`. Perfis antigos com `native/jwt-auth` ou `native/swagger-adapter` falham com
   `PROFILE_UNKNOWN_NATIVE`: mova a entrada para `extensions` depois de
   instalar o pacote.
@@ -211,15 +211,15 @@ npm run test:artifact                             # testes do build (instala pac
   ```sh
   cd <artefato> && npm ci --omit=dev --ignore-scripts --allow-scripts=
   # o .npmrc do artefato (legacy-peer-deps=true) precisa ir junto: sem ele, o npm ci tenta baixar
-  # @devtrack/foundation-api como peer das extensões instaladas
+  # @devtrack-solution/foundation-api como peer das extensões instaladas
   node dist/main.js
   ```
 
   Não há passo depois do `npm ci`. Quando alguma extensão declara o host como peer, o `package.json` do
-  artefato traz `"@devtrack/foundation-api": "file:."` e o mapa `exports` do host. O lock registra essa
+  artefato traz `"@devtrack-solution/foundation-api": "file:."` e o mapa `exports` do host. O lock registra essa
   entrada como link para a raiz (`resolved: ""`), e o próprio `npm ci` recria
-  `node_modules/@devtrack/foundation-api -> ../..`, sem script e sem rede. As extensões resolvem
-  `@devtrack/foundation-api/nest`, `/contracts` e `/native/*` para o `dist/` do artefato, a mesma instância
+  `node_modules/@devtrack-solution/foundation-api -> ../..`, sem script e sem rede. As extensões resolvem
+  `@devtrack-solution/foundation-api/nest`, `/contracts` e `/native/*` para o `dist/` do artefato, a mesma instância
   carregada por `dist/main.js`. A verificação aceita no lock só esse link para a raiz. Qualquer outro link
   reprova. O link não entra em `packages` do inventário porque não é pacote baixado e não tem `integrity`.
 

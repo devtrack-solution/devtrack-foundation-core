@@ -1,5 +1,5 @@
 {
-  "name": "@devtrack/foundation-api",
+  "name": "@devtrack-solution/foundation-api",
   "version": "0.1.0",
   "description": "DevTrack Foundation: core modular NestJS com contratos públicos, composição por perfil e módulos nativos.",
   "author": "",

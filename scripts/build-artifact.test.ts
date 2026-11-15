@@ -456,7 +456,7 @@ void describe('artifact: link do host no lock', () => {
         fs.readFileSync(path.join(out, 'package.json'), 'utf8'),
       ) as { dependencies: Record<string, string>; exports?: unknown };
       assert.equal(
-        manifest.dependencies['@devtrack/foundation-api'],
+        manifest.dependencies['@devtrack-solution/foundation-api'],
         undefined,
         'without extensions the artifact needs no host self-dependency',
       );
@@ -469,7 +469,7 @@ void describe('artifact: link do host no lock', () => {
         const lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as {
           packages: Record<string, unknown>;
         };
-        lock.packages['node_modules/@devtrack/foundation-api'] = {
+        lock.packages['node_modules/@devtrack-solution/foundation-api'] = {
           resolved,
           link: true,
         };
@@ -479,7 +479,7 @@ void describe('artifact: link do host no lock', () => {
       assert.doesNotThrow(() => verifyArtifact(withLink('host-link-root', '')));
       assert.throws(
         () => verifyArtifact(withLink('host-link-outside', '../outside')),
-        /lock node_modules\/@devtrack\/foundation-api links to \.\.\/outside, outside the artifact root/,
+        /lock node_modules\/@devtrack-solution\/foundation-api links to \.\.\/outside, outside the artifact root/,
       );
     },
   );

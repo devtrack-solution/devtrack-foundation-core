@@ -6,10 +6,10 @@
  * Sequência:
  * 1. Resolve no registry real (`--registry`, o DEVTRACK_REGISTRY) a maior versão publicada da
  *    Foundation dentro da faixa do peer do módulo e exige que este checkout seja essa versão.
- * 2. Sobe um Verdaccio efêmero (Docker): `@devtrack/*` sem uplink, demais pacotes do npmjs.
+ * 2. Sobe um Verdaccio efêmero (Docker): `@devtrack-solution/*` sem uplink, demais pacotes do npmjs.
  * 3. Copia para ele o tarball publicado da Foundation, com a integrity conferida contra o registry
  *    real, e publica nele o `npm pack` do módulo. Nada é publicado no registry real.
- * 4. Instala `@devtrack/api-cli` do registry real num prefixo separado (DEVTRACK_API_CLI_ROOT).
+ * 4. Instala `@devtrack-solution/api-cli` do registry real num prefixo separado (DEVTRACK_API_CLI_ROOT).
  * 5. Monta o inventário num host limpo (api-cli install + build:artifact), escreve a requisição
  *    do perfil padrão e roda o kit. O código de saída é o do kit: 0 passed, 1 failed, 2 incomplete.
  *
@@ -26,7 +26,7 @@ import { digestTree } from '../checks/artifacts';
 import { API_CLI_PACKAGE, API_CLI_ROOT_ENV, resolveApiCli } from './api-cli';
 
 const FOUNDATION_ROOT = path.resolve(__dirname, '..', '..', '..');
-const FOUNDATION_PACKAGE = '@devtrack/foundation-api';
+const FOUNDATION_PACKAGE = '@devtrack-solution/foundation-api';
 const VERDACCIO_IMAGE = 'verdaccio/verdaccio:6';
 /** Prazo dos comandos docker: um daemon travado não pode prender o job até o timeout do pipeline. */
 const DOCKER_TIMEOUT_MS = 120_000;
@@ -175,7 +175,7 @@ async function startEphemeralRegistry(dir: string): Promise<EphemeralRegistry> {
     '    url: https://registry.npmjs.org/',
     '    timeout: 60s',
     'packages:',
-    "  '@devtrack/*':",
+    "  '@devtrack-solution/*':",
     '    access: $all',
     '    publish: $all',
     "  '**':",
@@ -200,7 +200,7 @@ async function startEphemeralRegistry(dir: string): Promise<EphemeralRegistry> {
     try {
       if ((await fetch(`${url}/-/ping`)).ok) {
         const userconfig = path.join(dir, 'npmrc');
-        fs.writeFileSync(userconfig, `@devtrack:registry=${url}/\n//127.0.0.1:${port}/:_authToken=ephemeral\n`);
+        fs.writeFileSync(userconfig, `@devtrack-solution:registry=${url}/\n//127.0.0.1:${port}/:_authToken=ephemeral\n`);
         return { url, userconfig, stop };
       }
     } catch {
@@ -222,7 +222,7 @@ function packJson(stdout: string, destination: string): string {
 
 export async function qualifyPublished(options: Options): Promise<number> {
   const manifest = readModuleManifest(options.module);
-  const real = `--@devtrack:registry=${options.registry}/`;
+  const real = `--@devtrack-solution:registry=${options.registry}/`;
   log(`${manifest.name}@${manifest.version}, peer ${FOUNDATION_PACKAGE}@${manifest.peerRange}, registry ${options.registry}`);
 
   // 1. Foundation publicada dentro da faixa do peer, e este checkout precisa ser ela.
@@ -266,7 +266,7 @@ export async function qualifyPublished(options: Options): Promise<number> {
     fs.mkdirSync(envDir);
     fs.writeFileSync(path.join(envDir, 'package.json'), JSON.stringify({ name: 'conformance-env', version: '1.0.0', private: true }));
     requireOk(run('npm', ['install', `${FOUNDATION_PACKAGE}@${published}`, `${manifest.name}@${manifest.version}`, '--ignore-scripts', '--no-audit', '--no-fund'], envDir, ephemeral), 'install do ambiente de conformidade');
-    const host = path.join(envDir, 'node_modules', '@devtrack', 'foundation-api');
+    const host = path.join(envDir, 'node_modules', '@devtrack-solution', 'foundation-api');
     const moduleRoot = path.join(work, 'module');
     fs.mkdirSync(moduleRoot);
     execFileSync('tar', ['-xzf', moduleTarball, '-C', moduleRoot]);

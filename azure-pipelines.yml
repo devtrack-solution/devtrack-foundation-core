@@ -1,11 +1,11 @@
-# Pipeline do devtrack-foundation-core (@devtrack/foundation-api), change
+# Pipeline do devtrack-foundation-core (@devtrack-solution/foundation-api), change
 # split-foundation-repositories, D5.
 #
 # Gates: os mesmos do .github/workflows/ci.yml do monorepo para a Foundation, um job por gate.
 # Publicação: só em tag v<versão> igual ao package.json, depois de todos os gates verdes.
 #
 # Variáveis do pipeline (definidas na UI do Azure DevOps, não no repositório):
-#   DEVTRACK_REGISTRY        URL do registry do escopo @devtrack (D6)
+#   DEVTRACK_REGISTRY        URL do registry do escopo @devtrack-solution (D6)
 #   DEVTRACK_REGISTRY_TOKEN  secreta, token de publicação (só o job de publicação recebe)
 #
 # PR: o Azure Repos ignora a chave `pr:`. A validação de PR é a política de branch da main
@@ -165,9 +165,9 @@ stages:
               prefix="$AGENT_TEMPDIRECTORY/api-cli"
               mkdir -p "$prefix"
               echo '{"name":"ci-api-cli","version":"1.0.0","private":true}' > "$prefix/package.json"
-              npm install --prefix "$prefix" "@devtrack/api-cli@$API_CLI_VERSION" --no-audit --no-fund
-              echo "##vso[task.setvariable variable=DEVTRACK_API_CLI_ROOT]$prefix/node_modules/@devtrack/api-cli"
-            displayName: Instalar @devtrack/api-cli $(API_CLI_VERSION) num prefixo separado
+              npm install --prefix "$prefix" "@devtrack-solution/api-cli@$API_CLI_VERSION" --no-audit --no-fund
+              echo "##vso[task.setvariable variable=DEVTRACK_API_CLI_ROOT]$prefix/node_modules/@devtrack-solution/api-cli"
+            displayName: Instalar @devtrack-solution/api-cli $(API_CLI_VERSION) num prefixo separado
           - script: npm run test:conformance
             displayName: Kit de conformidade (exits 0/1/2, fixture inválida e qualificação publicada)
 
@@ -196,4 +196,4 @@ stages:
           - script: npm run build
             displayName: Build
           - script: npm publish
-            displayName: Publicar @devtrack/foundation-api no DEVTRACK_REGISTRY
+            displayName: Publicar @devtrack-solution/foundation-api no DEVTRACK_REGISTRY
